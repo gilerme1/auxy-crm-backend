@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS (sin cambios)
+enum RolUsuario {
+  SUPER_ADMIN
+  ADMIN
+  PROVIDER
+  OPERATOR
+}
+
+enum TipoVehiculo {
+  AUTO
+  CAMIONETA
+  CAMION
+  MOTO
+  OTRO
+}
+
+enum EstadoVehiculo {
+  ACTIVO
+  MANTENIMIENTO
+  INACTIVO
+}
+
+enum TipoAuxilio {
+  MECANICO
+  GRUA
+  BATERIA
+  COMBUSTIBLE
+  CAMBIO_RUEDA
+  CERRAJERIA
+  OTROS
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  ASIGNADO
+  EN_CAMINO
+  EN_SERVICIO
+  FINALIZADO
+  CANCELADO
+}
+
+enum Prioridad {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+// MODELOS
+
+model Usuario {
+  id        String      @id @default(uuid())
+  email     String      @unique
+  password  String
+  nombre    String
+  apellido  String
+  telefono  String?
+  rol       RolUsuario  @default(OPERATOR)
+  
+  isActive  Boolean     @default(true)
+  deletedAt DateTime?
+  
+  empresaId    String?
+  empresa      Empresa?   @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  
+  proveedorId  String?
+  proveedor    Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  
+  solicitudesCreadas   SolicitudAuxilio[] @relation("SolicitudCreador")
+  solicitudesAtendidas SolicitudAuxilio[] @relation("SolicitudAtendedor")
+  
+  refreshTokens RefreshToken[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([empresaId])
+  @@index([proveedorId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+model Empresa {
+  id           String   @id @default(uuid())
+  razonSocial  String
+  cuit         String   @unique
+  telefono     String
+  email        String
+  direccion    String
+  
+  isActive     Boolean  @default(true)
+  deletedAt    DateTime?
+  
+  planId       String?
+  plan         Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  
+  usuarios     Usuario[]
+  vehiculos    Vehiculo[]
+  solicitudes  SolicitudAuxilio[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([cuit])
+  @@index([planId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("empresas")
+}
+
+model Plan {
+  id                  String    @id @default(uuid())
+  nombre              String
+  descripcion         String?
+  serviciosIncluidos  String[]
+  precioMensual       Decimal   @db.Decimal(10, 2)
+  
+  isActive            Boolean   @default(true)
+  deletedAt           DateTime?
+  
+  empresas            Empresa[]
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("planes")
+}
+
+model Vehiculo {
+  id        String         @id @default(uuid())
+  patente   String         @unique
+  marca     String
+  modelo    String
+  año       Int
+  tipo      TipoVehiculo
+  
+  isActive  Boolean        @default(true)
+  deletedAt DateTime?
+  
+  estado    EstadoVehiculo @default(ACTIVO)  // Se mantiene para lógica operativa
+  
+  empresaId String
+  empresa   Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  
+  solicitudes SolicitudAuxilio[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patente])
+  @@index([empresaId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("vehiculos")
+}
+
+model Proveedor {
+  id                   String   @id @default(uuid())
+  razonSocial          String
+  cuit                 String   @unique
+  email                String
+  telefono             String
+  direccion            String?
+  serviciosOfrecidos   String[]
+  zonasCobertura       Json?
+  calificacionPromedio Decimal? @db.Decimal(3, 2)
+  
+  isActive             Boolean  @default(true)
+  deletedAt            DateTime?
+  
+  usuarios             Usuario[]
+  solicitudes          SolicitudAuxilio[]
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([cuit])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("proveedores")
+}
+
+model SolicitudAuxilio {
+  id          String          @id @default(uuid())
+  numero      String          @unique @default(cuid())
+  tipo        TipoAuxilio
+  estado      EstadoSolicitud @default(PENDIENTE)
+  prioridad   Prioridad       @default(MEDIA)
+  
+  latitud     Decimal         @db.Decimal(10, 8)
+  longitud    Decimal         @db.Decimal(11, 8)
+  direccion   String
+  
+  observaciones     String?
+  fotos             String[]
+  costoEstimado     Decimal?  @db.Decimal(10, 2)
+  costoFinal        Decimal?  @db.Decimal(10, 2)
+  calificacion      Int?
+  comentarioCliente String?
+  
+  fechaSolicitud    DateTime  @default(now())
+  fechaAsignacion   DateTime?
+  fechaInicio       DateTime?
+  fechaFinalizacion DateTime?
+  fechaCancelacion  DateTime?
+  motivoCancelacion String?
+  
+  isActive          Boolean   @default(true)
+  deletedAt         DateTime?
+  
+  empresaId   String
+  empresa     Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  
+  vehiculoId  String
+  vehiculo    Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
+  
+  proveedorId String?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  
+  solicitadoPorId String
+  solicitadoPor   Usuario @relation("SolicitudCreador", fields: [solicitadoPorId], references: [id], onDelete: Restrict)
+  
+  atendidoPorId   String?
+  atendidoPor     Usuario? @relation("SolicitudAtendedor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([numero])
+  @@index([estado])
+  @@index([empresaId])
+  @@index([vehiculoId])
+  @@index([proveedorId])
+  @@index([fechaSolicitud])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("solicitudes_auxilio")
+}
