@@ -50,9 +50,6 @@ cp .env.example .env
 # Crear base de datos y ejecutar migraciones
 npx prisma migrate dev
 
-# Ejecutar seed (datos de prueba)
-npm run prisma:seed
-
 # Iniciar servidor en desarrollo
 npm run start:dev
 ```

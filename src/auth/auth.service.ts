@@ -22,7 +22,6 @@ export class AuthService {
       private jwtService: JwtService,
       private config: ConfigService,
     ) {}
-
     async register(dto: RegisterDto) {
       // Verificar si el email ya existe
       const existingUser = await this.prisma.usuario.findUnique({
@@ -33,6 +32,21 @@ export class AuthService {
         throw new ConflictException('El email ya está registrado');
       }
 
+      const clienteRoles = ['CLIENTE_ADMIN', 'CLIENTE_OPERADOR'];
+      const proveedorRoles = ['PROVEEDOR_ADMIN', 'PROVEEDOR_OPERADOR'];
+
+      if (clienteRoles.includes(dto.rol) && !dto.empresaId) {
+        throw new BadRequestException('Usuarios de cliente deben especificar empresaId');
+      }
+      if (proveedorRoles.includes(dto.rol) && !dto.proveedorId) {
+        throw new BadRequestException('Usuarios de proveedor deben especificar proveedorId');
+      }
+      if (clienteRoles.includes(dto.rol) && dto.proveedorId) {
+        throw new BadRequestException('Usuarios de cliente no pueden tener proveedorId');
+      }
+      if (proveedorRoles.includes(dto.rol) && dto.empresaId) {
+        throw new BadRequestException('Usuarios de proveedor no pueden tener empresaId');
+      }
       // Hash de la contraseña
       const hashedPassword = await bcrypt.hash(dto.password, 12);
 

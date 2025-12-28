@@ -25,7 +25,7 @@ export class RegisterDto {
     @IsString()
     telefono?: string;
 
-    @ApiProperty({ enum: RolUsuario, example: RolUsuario.OPERATOR })
+    @ApiProperty({ enum: RolUsuario, example: RolUsuario.CLIENTE_ADMIN })
     @IsEnum(RolUsuario)
     rol: RolUsuario;
 

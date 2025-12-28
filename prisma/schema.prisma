@@ -7,12 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ENUMS (sin cambios)
+// ============================================
+//                  ENUMS 
+// ============================================
+
 enum RolUsuario {
-  SUPER_ADMIN
-  ADMIN
-  PROVIDER
-  OPERATOR
+  SUPER_ADMIN           // Staff de Auxy
+  CLIENTE_ADMIN         // Gerente / Admin de flota cliente
+  CLIENTE_OPERADOR      // Chofer / operador de flota cliente (crea solicitudes)
+  PROVEEDOR_ADMIN       // Dueño / gerente de empresa proveedora
+  PROVEEDOR_OPERADOR    // Chofer de grúa / técnico en campo (atiende solicitudes)
 }
 
 enum TipoVehiculo {
@@ -21,6 +25,7 @@ enum TipoVehiculo {
   CAMION
   MOTO
   OTRO
+  // Opcional: agregar más específicos si el negocio lo requiere (BUS, UTILITARIO, etc.)
 }
 
 enum EstadoVehiculo {
@@ -55,37 +60,62 @@ enum Prioridad {
   URGENTE
 }
 
-// MODELOS
+enum TipoVehiculoProveedor {
+  GRUA                  // Autos/camionetas
+  GRUA_PESADA           // Camiones pesados
+  TECNICO               // Para mecánica en ruta
+  CERRAJERO            
+  OTRO
+}
+
+// Estado de disponibilidad realtime para operadores de proveedor
+enum EstadoDisponibilidad {
+  DISPONIBLE
+  OCUPADO
+  EN_PAUSA
+  FUERA_DE_ZONA
+  DESCONECTADO
+}
+
+// ============================================
+//                  MODELOS 
+// ============================================
 
 model Usuario {
-  id        String      @id @default(uuid())
-  email     String      @unique
+  id        String   @id @default(uuid())
+  email     String   @unique
   password  String
   nombre    String
   apellido  String
   telefono  String?
-  rol       RolUsuario  @default(OPERATOR)
-  
-  isActive  Boolean     @default(true)
+
+  rol       RolUsuario @default(CLIENTE_OPERADOR) // Cambiado default a más común
+
+  isActive  Boolean  @default(true)
   deletedAt DateTime?
-  
-  empresaId    String?
-  empresa      Empresa?   @relation(fields: [empresaId], references: [id], onDelete: SetNull)
-  
-  proveedorId  String?
-  proveedor    Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
-  
+
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+
+  proveedorId String?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+
+  estadoDisponibilidad EstadoDisponibilidad? @default(DESCONECTADO)
+  ultimaUbicacion      Json?                 // { lat: number, lng: number, updatedAt: Date }
+
   solicitudesCreadas   SolicitudAuxilio[] @relation("SolicitudCreador")
   solicitudesAtendidas SolicitudAuxilio[] @relation("SolicitudAtendedor")
-  
+
   refreshTokens RefreshToken[]
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([email])
   @@index([empresaId])
   @@index([proveedorId])
+  @@index([rol])
+  @@index([estadoDisponibilidad])
   @@index([isActive])
   @@index([deletedAt])
   @@map("usuarios")
@@ -195,6 +225,8 @@ model Proveedor {
   
   usuarios             Usuario[]
   solicitudes          SolicitudAuxilio[]
+
+  vehiculosProveedor VehiculoProveedor[]
   
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -203,6 +235,38 @@ model Proveedor {
   @@index([isActive])
   @@index([deletedAt])
   @@map("proveedores")
+}
+
+// Recursos del proveedor (grúas, camionetas, etc.)
+model VehiculoProveedor {
+  id          String              @id @default(uuid())
+  patente     String              @unique
+  marca       String
+  modelo      String
+  año         Int
+  tipo        TipoVehiculoProveedor
+
+  capacidadKg Int?                // Ej: 3500, 7000, etc. (para matching)
+  estado      EstadoVehiculo      @default(ACTIVO)
+
+  proveedorId String
+  proveedor    Proveedor           @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+
+  solicitudes SolicitudAuxilio[]  @relation("SolicitudVehiculoProveedor") // Opcional, si asignamos recurso específico
+
+  isActive    Boolean             @default(true)
+  deletedAt   DateTime?
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([patente])
+  @@index([proveedorId])
+  @@index([tipo])
+  @@index([estado])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("vehiculos_proveedor")
 }
 
 model SolicitudAuxilio {
@@ -238,6 +302,9 @@ model SolicitudAuxilio {
   
   vehiculoId  String
   vehiculo    Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
+
+  vehiculoProveedorId String?
+  vehiculoProveedor   VehiculoProveedor? @relation("SolicitudVehiculoProveedor", fields: [vehiculoProveedorId], references: [id], onDelete: SetNull)
   
   proveedorId String?
   proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)

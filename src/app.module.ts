@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -12,6 +11,7 @@ import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { PlanesModule } from './planes/planes.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveedor.module';
 
 @Module({
   imports: [
@@ -26,6 +26,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     VehiculosModule,
     ProveedoresModule,
     SolicitudesModule,
+    VehiculosProveedorModule,
     PlanesModule,
   ],
   providers: [

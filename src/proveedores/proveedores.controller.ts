@@ -62,7 +62,7 @@ export class ProveedoresController {
     }
 
     @Get(':id/estadisticas')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.PROVIDER)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
     @ApiOperation({ summary: 'Obtener estadísticas del proveedor' })
     @ApiResponse({ status: 200, description: 'Estadísticas' })
     getEstadisticas(

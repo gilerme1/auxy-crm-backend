@@ -41,7 +41,7 @@ export class EmpresasService {
 
   async findAll(userRole: string, empresaId?: string) {
     // Si es ADMIN, solo ve su propia empresa
-    if (userRole === RolUsuario.ADMIN || userRole === RolUsuario.OPERATOR) {
+    if (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) {
       if (!empresaId) {
         throw new ForbiddenException('No tienes empresa asignada');
       }
@@ -82,7 +82,7 @@ export class EmpresasService {
   async findOne(id: string, userRole: string, userEmpresaId?: string) {
     // Verificar acceso
     if (
-      (userRole === RolUsuario.ADMIN || userRole === RolUsuario.OPERATOR) &&
+      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
       id !== userEmpresaId
     ) {
       throw new ForbiddenException('No tienes acceso a esta empresa');
@@ -169,7 +169,7 @@ export class EmpresasService {
   async getVehiculos(id: string, userRole: string, userEmpresaId?: string) {
     // Verificar acceso
     if (
-      (userRole === RolUsuario.ADMIN || userRole === RolUsuario.OPERATOR) &&
+      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
       id !== userEmpresaId
     ) {
       throw new ForbiddenException('No tienes acceso a esta empresa');
@@ -184,7 +184,7 @@ export class EmpresasService {
   async getSolicitudes(id: string, userRole: string, userEmpresaId?: string) {
     // Verificar acceso
     if (
-      (userRole === RolUsuario.ADMIN || userRole === RolUsuario.OPERATOR) &&
+      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
       id !== userEmpresaId
     ) {
       throw new ForbiddenException('No tienes acceso a esta empresa');

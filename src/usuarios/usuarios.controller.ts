@@ -6,7 +6,7 @@ import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { RolUsuario } from '@prisma/client';
+import { EstadoDisponibilidad, RolUsuario } from '@prisma/client';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth()
@@ -15,8 +15,8 @@ export class UsuariosController {
   constructor(private readonly usuariosService: UsuariosService) {}
 
   @Post()
-  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
-  @ApiOperation({ summary: 'Crear usuario' })
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
+  @ApiOperation({ summary: 'Crear usuario (SUPER_ADMIN, gerentes de cliente o proveedor)' })
   @ApiResponse({ status: 201, description: 'Usuario creado' })
   @ApiResponse({ status: 409, description: 'Email duplicado' })
   create(@Body() dto: CreateUsuarioDto) {
@@ -48,7 +48,7 @@ export class UsuariosController {
   }
 
   @Patch(':id')
-  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
   @ApiOperation({ summary: 'Actualizar usuario' })
   @ApiResponse({ status: 200, description: 'Usuario actualizado' })
   update(@Param('id') id: string, @Body() dto: UpdateUsuarioDto) {
@@ -70,7 +70,7 @@ export class UsuariosController {
   }
 
   @Patch(':id/active')
-  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
   @ApiOperation({ summary: 'Toggle activo/inactivo' })
   @ApiResponse({ status: 200, description: 'Estado cambiado' })
   toggleActive(@Param('id') id: string) {
@@ -83,5 +83,15 @@ export class UsuariosController {
   @ApiResponse({ status: 200, description: 'Usuario eliminado' })
   remove(@Param('id') id: string) {
     return this.usuariosService.softDelete(id);
+  }
+
+  @Post('disponibilidad')
+  @Roles(RolUsuario.PROVEEDOR_OPERADOR)
+  @ApiOperation({ summary: 'Actualizar estado de disponibilidad (solo operadores de proveedor)' })
+  async updateDisponibilidad(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: { estado: EstadoDisponibilidad; ubicacion?: { lat: number; lng: number } },
+  ) {
+    return await this.usuariosService.updateDisponibilidad(userId, dto);
   }
 }

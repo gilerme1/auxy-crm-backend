@@ -21,7 +21,7 @@ export class VehiculosController {
     constructor(private readonly vehiculosService: VehiculosService) {}
 
     @Post()
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
     @ApiOperation({ summary: 'Crear vehículo' })
     @ApiResponse({ status: 201, description: 'Vehículo creado' })
     @ApiResponse({ status: 409, description: 'Patente duplicada' })
@@ -56,7 +56,7 @@ export class VehiculosController {
     }
 
     @Patch(':id')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
     @ApiOperation({ summary: 'Actualizar vehículo' })
     @ApiResponse({ status: 200, description: 'Vehículo actualizado' })
     update(@Param('id') id: string, @Body() dto: Partial<CreateVehiculoDto>) {
@@ -64,7 +64,7 @@ export class VehiculosController {
     }
 
     @Delete(':id')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
     @ApiOperation({ summary: 'Eliminar vehículo (cambiar a INACTIVO)' })
     @ApiResponse({ status: 200, description: 'Vehículo eliminado' })
     remove(@Param('id') id: string) {

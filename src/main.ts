@@ -22,7 +22,7 @@ async function bootstrap() {
     });
 
     // Global prefix
-    app.setGlobalPrefix('api/v1');
+    app.setGlobalPrefix('api');
 
     // Validation pipe global
     app.useGlobalPipes(
@@ -57,7 +57,7 @@ async function bootstrap() {
     const port = process.env.PORT || 3000;
     await app.listen(port);
 
-    console.log(`🚀 Server running on: http://localhost:${port}/api/v1`);
+    console.log(`🚀 Server running on: http://localhost:${port}/api`);
     console.log(`📚 API Docs: http://localhost:${port}/api/docs`);
 }
 

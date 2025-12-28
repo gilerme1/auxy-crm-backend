@@ -52,7 +52,7 @@ export class EmpresasController {
     }
 
     @Patch(':id')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.ADMIN)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
     @ApiOperation({ summary: 'Actualizar empresa' })
     @ApiResponse({ status: 200, description: 'Empresa actualizada' })
     update(@Param('id') id: string, @Body() dto: Partial<CreateEmpresaDto>) {

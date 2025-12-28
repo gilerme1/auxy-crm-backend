@@ -3,13 +3,15 @@ import {
   NotFoundException,
   ConflictException,
   UnauthorizedException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
-import { RolUsuario, Prisma } from '@prisma/client';
+import { RolUsuario, Prisma, EstadoDisponibilidad } from '@prisma/client';
 
 @Injectable()
 export class UsuariosService {
@@ -20,8 +22,27 @@ export class UsuariosService {
       where: { email: dto.email },
     });
 
-    if (existingUser) {
-      throw new ConflictException('El email ya está registrado');
+    if (existingUser) throw new ConflictException('El email ya está registrado');
+
+    // 2. Validar existencia de Empresa si se provee empresaId
+    if (dto.empresaId) {
+        const empresa = await this.prisma.empresa.findUnique({
+            where: { id: dto.empresaId, isActive: true } // Solo empresas activas [cite: 16]
+        });
+        if (!empresa) throw new NotFoundException(`La empresa con ID ${dto.empresaId} no existe o está inactiva`);
+    }
+
+    // 3. Validar existencia de Proveedor si se provee proveedorId
+    if (dto.proveedorId) {
+        const proveedor = await this.prisma.proveedor.findUnique({
+            where: { id: dto.proveedorId, isActive: true } // Solo proveedores activos [cite: 25]
+        });
+        if (!proveedor) throw new NotFoundException(`El proveedor con ID ${dto.proveedorId} no existe o está inactivo`);
+    }
+
+    // 4. Lógica de negocio: Un usuario no debería ser Empresa y Proveedor a la vez
+    if (dto.empresaId && dto.proveedorId) {
+        throw new BadRequestException('Un usuario no puede estar vinculado a una empresa y a un proveedor simultáneamente');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
@@ -152,6 +173,21 @@ export class UsuariosService {
         rol: true,
         isActive: true,
       }
+    });
+  }
+
+  async updateDisponibilidad(userId: string, dto: { estado: EstadoDisponibilidad; ubicacion?: { lat: number; lng: number } }) {
+    const user = await this.prisma.usuario.findUnique({ where: { id: userId } });
+    if (!user || !['PROVEEDOR_OPERADOR'].includes(user.rol)) {
+      throw new ForbiddenException('Solo operadores de proveedor pueden actualizar disponibilidad');
+    }
+
+    return this.prisma.usuario.update({
+      where: { id: userId },
+      data: {
+        estadoDisponibilidad: dto.estado,
+        ultimaUbicacion: dto.ubicacion ? { ...dto.ubicacion, updatedAt: new Date() } : undefined,
+      },
     });
   }
 
