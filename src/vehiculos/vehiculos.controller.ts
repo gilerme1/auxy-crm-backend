@@ -6,79 +6,128 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiConflictResponse,
+  ApiBadRequestResponse,
+} from '@nestjs/swagger';
 import { VehiculosService } from './vehiculos.service';
 import { CreateVehiculoDto } from './dto/create-vehiculo.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 
-@ApiTags('Vehículos')
+@ApiTags('vehiculos')
 @ApiBearerAuth()
 @Controller('vehiculos')
+@UseGuards(JwtAuthGuard) // Todas las rutas requieren autenticación
 export class VehiculosController {
-    constructor(private readonly vehiculosService: VehiculosService) {}
+  constructor(private readonly vehiculosService: VehiculosService) {}
 
-    @Post()
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
-    @ApiOperation({ summary: 'Crear vehículo' })
-    @ApiResponse({ status: 201, description: 'Vehículo creado' })
-    @ApiResponse({ status: 409, description: 'Patente duplicada' })
-    create(
-      @Body() dto: CreateVehiculoDto,
-      @CurrentUser('rol') userRole: string,
-      @CurrentUser('empresaId') userEmpresaId?: string,
-    ) {
-      return this.vehiculosService.create(dto, userRole, userEmpresaId);
-    }
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
+  @ApiOperation({ summary: 'Crear vehículo/recurso del proveedor' })
+  @ApiResponse({ status: 201, description: 'Vehículo creado exitosamente' })
+  @ApiConflictResponse({ description: 'La patente ya está registrada' })
+  @ApiBadRequestResponse({ description: 'Datos inválidos o empresa inactiva' })
+  @ApiForbiddenResponse({ description: 'No tienes permiso para crear en esa empresa' })
+  create(
+    @Body() createVehiculoDto: CreateVehiculoDto,
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') userEmpresaId?: string,
+  ) {
+    return this.vehiculosService.create(createVehiculoDto, userRole, userEmpresaId);
+  }
 
-    @Get()
-    @ApiOperation({ summary: 'Listar vehículos' })
-    @ApiResponse({ status: 200, description: 'Lista de vehículos' })
-    findAll(
-      @CurrentUser('rol') userRole: string,
-      @CurrentUser('empresaId') empresaId?: string,
-    ) {
-      return this.vehiculosService.findAll(userRole, empresaId);
-    }
+  @Get()
+  @ApiOperation({
+    summary: 'Listar vehículos del proveedor',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de vehículos obtenida' })
+  @ApiForbiddenResponse({ description: 'No tienes empresa asignada (para roles cliente)' })
+  findAll(
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') empresaId?: string,
+  ) {
+    return this.vehiculosService.findAll(userRole, empresaId);
+  }
 
-    @Get(':id')
-    @ApiOperation({ summary: 'Obtener vehículo por ID' })
-    @ApiResponse({ status: 200, description: 'Vehículo encontrado' })
-    @ApiResponse({ status: 404, description: 'Vehículo no encontrado' })
-    findOne(
-      @Param('id') id: string,
-      @CurrentUser('rol') userRole: string,
-      @CurrentUser('empresaId') userEmpresaId?: string,
-    ) {
-      return this.vehiculosService.findOne(id, userRole, userEmpresaId);
-    }
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener vehículo de proveedor por ID' })
+  @ApiParam({ name: 'id', description: 'ID del vehículo (UUID)' })
+  @ApiResponse({ status: 200, description: 'Vehículo encontrado' })
+  @ApiNotFoundResponse({ description: 'Vehículo no encontrado' })
+  @ApiForbiddenResponse({ description: 'No tienes acceso a este vehículo' })
+  @ApiBadRequestResponse({ description: 'Vehículo inactivo' })
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') userEmpresaId?: string,
+  ) {
+    return this.vehiculosService.findOne(id, userRole, userEmpresaId);
+  }
 
-    @Patch(':id')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
-    @ApiOperation({ summary: 'Actualizar vehículo' })
-    @ApiResponse({ status: 200, description: 'Vehículo actualizado' })
-    update(@Param('id') id: string, @Body() dto: Partial<CreateVehiculoDto>) {
-      return this.vehiculosService.update(id, dto);
-    }
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
+  @ApiOperation({ summary: 'Actualizar datos de vehículo del proveedor' })
+  @ApiParam({ name: 'id', description: 'ID del vehículo (UUID)' })
+  @ApiBody({ type: CreateVehiculoDto, description: 'Campos a actualizar (parcial)' })
+  @ApiResponse({ status: 200, description: 'Vehículo actualizado exitosamente' })
+  @ApiNotFoundResponse({ description: 'Vehículo no encontrado' })
+  @ApiForbiddenResponse({ description: 'No tienes permiso para modificar este vehículo' })
+  @ApiConflictResponse({ description: 'La nueva patente ya está registrada' })
+  @ApiBadRequestResponse({ description: 'Datos inválidos o empresa destino inválida' })
+  update(
+    @Param('id') id: string,
+    @Body() updateVehiculoDto: Partial<CreateVehiculoDto>,
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') userEmpresaId?: string,
+  ) {
+    return this.vehiculosService.update(id, updateVehiculoDto, userRole, userEmpresaId);
+  }
 
-    @Delete(':id')
-    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
-    @ApiOperation({ summary: 'Eliminar vehículo (cambiar a INACTIVO)' })
-    @ApiResponse({ status: 200, description: 'Vehículo eliminado' })
-    remove(@Param('id') id: string) {
-      return this.vehiculosService.remove(id);
-    }
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
+  @ApiOperation({
+    summary: 'Inactivar un vehículo (cambio de estado a INACTIVO - soft delete)',
+  })
+  @ApiParam({ name: 'id', description: 'ID del vehículo (UUID)' })
+  @ApiResponse({ status: 200, description: 'Vehículo inactivado exitosamente' })
+  @ApiNotFoundResponse({ description: 'Vehículo no encontrado' })
+  @ApiForbiddenResponse({ description: 'No tienes permiso para inactivar este vehículo' })
+  remove(
+    @Param('id') id: string,
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') userEmpresaId?: string,
+  ) {
+    return this.vehiculosService.remove(id, userRole, userEmpresaId);
+  }
 
-    @Get(':id/historial')
-    @ApiOperation({ summary: 'Obtener historial de auxilios del vehículo' })
-    @ApiResponse({ status: 200, description: 'Historial de auxilios' })
-    getHistorial(
-      @Param('id') id: string,
-      @CurrentUser('rol') userRole: string,
-      @CurrentUser('empresaId') userEmpresaId?: string,
-    ) {
-      return this.vehiculosService.getHistorial(id, userRole, userEmpresaId);
-    }
+  @Get(':id/historial')
+  @ApiOperation({ summary: 'Historial de solicitudes atendidas por este vehículo' })
+  @ApiParam({ name: 'id', description: 'ID del vehículo (UUID)' })
+  @ApiResponse({ status: 200, description: 'Historial de solicitudes obtenido' })
+  @ApiNotFoundResponse({ description: 'Vehículo no encontrado' })
+  @ApiForbiddenResponse({ description: 'No tienes acceso al historial de este vehículo' })
+  getHistorial(
+    @Param('id') id: string,
+    @CurrentUser('rol') userRole: RolUsuario,
+    @CurrentUser('empresaId') userEmpresaId?: string,
+  ) {
+    return this.vehiculosService.getHistorial(id, userRole, userEmpresaId);
+  }
 }

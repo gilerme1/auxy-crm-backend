@@ -28,10 +28,7 @@ export class VehiculosProveedorService {
         }
 
         // Solo PROVEEDOR_ADMIN puede crear para su empresa
-        if (
-        currentUser.rol !== RolUsuario.PROVEEDOR_ADMIN &&
-        currentUser.rol !== RolUsuario.SUPER_ADMIN
-        ) {
+        if (currentUser.rol !== RolUsuario.PROVEEDOR_ADMIN && currentUser.rol !== RolUsuario.SUPER_ADMIN) {
         throw new ForbiddenException('Solo administradores de proveedor pueden crear vehículos');
         }
 
@@ -41,19 +38,19 @@ export class VehiculosProveedorService {
 
         // Verificar que el proveedor existe
         const proveedor = await this.prisma.proveedor.findUnique({
-        where: { id: dto.proveedorId },
+            where: { id: dto.proveedorId },
         });
 
         if (!proveedor || !proveedor.isActive) {
-        throw new NotFoundException('Proveedor no encontrado o inactivo');
+            throw new NotFoundException('Proveedor no encontrado o inactivo');
         }
 
         return this.prisma.vehiculoProveedor.create({
-        data: {
-            ...dto,
-            patente: dto.patente.toUpperCase(),
-        },
-        include: { proveedor: { select: { id: true, razonSocial: true } } },
+            data: {
+                ...dto,
+                patente: dto.patente.toUpperCase(),
+            },
+            include: { proveedor: { select: { id: true, razonSocial: true } } },
         });
     }
 
@@ -93,10 +90,7 @@ export class VehiculosProveedorService {
         throw new NotFoundException('Vehículo de proveedor no encontrado');
         }
 
-        if (
-        currentUser.rol !== RolUsuario.SUPER_ADMIN &&
-        vehiculo.proveedorId !== currentUser.proveedorId
-        ) {
+        if (currentUser.rol !== RolUsuario.SUPER_ADMIN && vehiculo.proveedorId !== currentUser.proveedorId) {
         throw new ForbiddenException('No tienes acceso a este vehículo');
         }
 
@@ -110,20 +104,17 @@ export class VehiculosProveedorService {
         throw new NotFoundException('Vehículo de proveedor no encontrado');
         }
 
-        if (
-        currentUser.rol !== RolUsuario.SUPER_ADMIN &&
-        vehiculo.proveedorId !== currentUser.proveedorId
-        ) {
+        if (currentUser.rol !== RolUsuario.SUPER_ADMIN && vehiculo.proveedorId !== currentUser.proveedorId) {
         throw new ForbiddenException('No tienes permiso para modificar este vehículo');
         }
 
         if (dto.patente && dto.patente.toUpperCase() !== vehiculo.patente) {
-        const existing = await this.prisma.vehiculoProveedor.findUnique({
-            where: { patente: dto.patente.toUpperCase() },
-        });
-        if (existing) {
-            throw new ConflictException('La patente ya está registrada');
-        }
+            const existing = await this.prisma.vehiculoProveedor.findUnique({
+                where: { patente: dto.patente.toUpperCase() },
+            });
+            if (existing) {
+                throw new ConflictException('La patente ya está registrada');
+            }
         }
 
         return this.prisma.vehiculoProveedor.update({
@@ -143,10 +134,7 @@ export class VehiculosProveedorService {
         throw new NotFoundException('Vehículo de proveedor no encontrado');
         }
 
-        if (
-        currentUser.rol !== RolUsuario.SUPER_ADMIN &&
-        vehiculo.proveedorId !== currentUser.proveedorId
-        ) {
+        if (currentUser.rol !== RolUsuario.SUPER_ADMIN && vehiculo.proveedorId !== currentUser.proveedorId) {
         throw new ForbiddenException('No tienes permiso para eliminar este vehículo');
         }
 
@@ -166,10 +154,7 @@ export class VehiculosProveedorService {
         throw new NotFoundException('Vehículo de proveedor no encontrado');
         }
 
-        if (
-        currentUser.rol !== RolUsuario.SUPER_ADMIN &&
-        vehiculo.proveedorId !== currentUser.proveedorId
-        ) {
+        if (currentUser.rol !== RolUsuario.SUPER_ADMIN && vehiculo.proveedorId !== currentUser.proveedorId) {
         throw new ForbiddenException('No tienes acceso a este historial');
         }
 

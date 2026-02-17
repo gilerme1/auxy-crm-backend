@@ -28,6 +28,13 @@ export class SolicitudesService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateSolicitudDto, userId: string) {
+    // Validar coordenadas
+    if (
+      typeof dto.latitud !== 'number' || dto.latitud < -90 || dto.latitud > 90 ||
+      typeof dto.longitud !== 'number' || dto.longitud < -180 || dto.longitud > 180
+    ) {
+      throw new BadRequestException('Coordenadas de ubicación inválidas. Latitud debe estar entre -90 y 90, longitud entre -180 y 180.');
+    }
     const vehiculo = await this.prisma.vehiculo.findUnique({
       where: { id: dto.vehiculoId },
       include: { empresa: true },
@@ -45,10 +52,7 @@ export class SolicitudesService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    if (
-      usuario.rol !== RolUsuario.SUPER_ADMIN &&
-      usuario.empresaId !== vehiculo.empresaId
-    ) {
+    if (usuario.rol !== RolUsuario.SUPER_ADMIN && usuario.empresaId !== vehiculo.empresaId) {
       throw new ForbiddenException('No tienes acceso a este vehículo');
     }
 
@@ -96,15 +100,9 @@ export class SolicitudesService {
     if (!usuario) throw new ForbiddenException('Usuario no válido');
 
     // Filtros según rol - usamos comparación directa con enum
-    if (
-      userRole === RolUsuario.CLIENTE_ADMIN ||
-      userRole === RolUsuario.CLIENTE_OPERADOR
-    ) {
+    if (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) {
       if (usuario.empresaId) where.empresaId = usuario.empresaId;
-    } else if (
-      userRole === RolUsuario.PROVEEDOR_ADMIN ||
-      userRole === RolUsuario.PROVEEDOR_OPERADOR
-    ) {
+    } else if (userRole === RolUsuario.PROVEEDOR_ADMIN || userRole === RolUsuario.PROVEEDOR_OPERADOR) {
       if (usuario.proveedorId) where.proveedorId = usuario.proveedorId;
     }
 
@@ -154,9 +152,12 @@ export class SolicitudesService {
       },
     });
 
-    if (!solicitud) throw new NotFoundException('Solicitud no encontrada');
+    if (!solicitud) {
+      throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
+    }
 
     await this.checkAccess(solicitud, userId, userRole);
+    
     return solicitud;
   }
   

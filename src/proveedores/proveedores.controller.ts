@@ -22,7 +22,7 @@ export class ProveedoresController {
     @ApiResponse({ status: 403, description: 'Acceso denegado' })
     create(
       @Body() dto: CreateProveedorDto,
-      @CurrentUser() currentUser: { id: string; rol: RolUsuario }, // Mejor: inyectar todo el usuario
+      @CurrentUser() currentUser: { id: string; rol: RolUsuario },
     ) {
       return this.proveedoresService.create(dto, currentUser);
     }

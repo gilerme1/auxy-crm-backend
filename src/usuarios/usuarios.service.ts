@@ -17,32 +17,35 @@ import { RolUsuario, Prisma, EstadoDisponibilidad } from '@prisma/client';
 export class UsuariosService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateUsuarioDto) {
+  async create(dto: CreateUsuarioDto, currentUserRole: RolUsuario) {
+    if (currentUserRole !== RolUsuario.SUPER_ADMIN && dto.rol === RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo super admins pueden crear otros super admins');
+    }
     const existingUser = await this.prisma.usuario.findUnique({
       where: { email: dto.email },
     });
+    if (existingUser) throw new ConflictException(`El email ${dto.email} ya está registrado`);
 
-    if (existingUser) throw new ConflictException('El email ya está registrado');
-
-    // 2. Validar existencia de Empresa si se provee empresaId
     if (dto.empresaId) {
-        const empresa = await this.prisma.empresa.findUnique({
-            where: { id: dto.empresaId, isActive: true } // Solo empresas activas [cite: 16]
-        });
-        if (!empresa) throw new NotFoundException(`La empresa con ID ${dto.empresaId} no existe o está inactiva`);
+      const empresa = await this.prisma.empresa.findUnique({
+        where: { id: dto.empresaId, isActive: true }
+      });
+      if (!empresa) throw new NotFoundException(`La empresa con ID ${dto.empresaId} no existe o está inactiva`);
     }
 
-    // 3. Validar existencia de Proveedor si se provee proveedorId
     if (dto.proveedorId) {
-        const proveedor = await this.prisma.proveedor.findUnique({
-            where: { id: dto.proveedorId, isActive: true } // Solo proveedores activos [cite: 25]
-        });
-        if (!proveedor) throw new NotFoundException(`El proveedor con ID ${dto.proveedorId} no existe o está inactivo`);
+      const proveedor = await this.prisma.proveedor.findUnique({
+        where: { id: dto.proveedorId, isActive: true }
+      });
+      if (!proveedor) throw new NotFoundException(`El proveedor con ID ${dto.proveedorId} no existe o está inactivo`);
     }
 
-    // 4. Lógica de negocio: Un usuario no debería ser Empresa y Proveedor a la vez
     if (dto.empresaId && dto.proveedorId) {
-        throw new BadRequestException('Un usuario no puede estar vinculado a una empresa y a un proveedor simultáneamente');
+      throw new BadRequestException('Un usuario no puede estar vinculado a una empresa y a un proveedor simultáneamente');
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dto.email)) {
+      throw new BadRequestException('Formato de email inválido');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
@@ -71,25 +74,28 @@ export class UsuariosService {
     });
   }
 
-  async findAll(userRole: RolUsuario, userEmpresaId?: string, userProveedorId?: string) {
-    // CORRECCIÓN: Usar Prisma.UsuarioWhereInput en lugar de any
-    const where: Prisma.UsuarioWhereInput = { 
-      isActive: true, 
-      deletedAt: null 
-    };
-
+  async findAll(userRole: RolUsuario, userEmpresaId?: string, userProveedorId?: string, query?: { page?: number, limit?: number }) {
+    const where: Prisma.UsuarioWhereInput = { isActive: true, deletedAt: null };
     if (userRole !== RolUsuario.SUPER_ADMIN) {
       if (userEmpresaId) {
+        const empresaExists = await this.prisma.empresa.findUnique({ where: { id: userEmpresaId } });
+        if (!empresaExists) throw new NotFoundException(`Empresa ID ${userEmpresaId} no existe`);
         where.empresaId = userEmpresaId;
       } else if (userProveedorId) {
+        const proveedorExists = await this.prisma.proveedor.findUnique({ where: { id: userProveedorId } });
+        if (!proveedorExists) throw new NotFoundException(`Proveedor ID ${userProveedorId} no existe`);
         where.proveedorId = userProveedorId;
       } else {
-        throw new UnauthorizedException('No tienes acceso');
+        throw new ForbiddenException('No tienes empresa o proveedor asignado para acceder a usuarios');
       }
     }
-
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+    const skip = (page - 1) * limit;
     return this.prisma.usuario.findMany({
       where,
+      skip,
+      take: limit,
       select: {
         id: true,
         email: true,
@@ -108,9 +114,13 @@ export class UsuariosService {
     });
   }
 
-  async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string, userProveedorId?: string) {
+  async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string, userProveedorId?: string, includeInactive = false) {
+    const where: Prisma.UsuarioWhereUniqueInput = { id };
+    if (!includeInactive) {
+      where['isActive'] = true;
+    }
     const user = await this.prisma.usuario.findUnique({
-      where: { id },
+      where,
       select: {
         id: true,
         email: true,
@@ -129,31 +139,36 @@ export class UsuariosService {
     });
 
     if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
 
-    // Validación de acceso según pertenencia a empresa o proveedor
     if (userRole !== RolUsuario.SUPER_ADMIN) {
       const perteneceAEmpresa = userEmpresaId && user.empresaId === userEmpresaId;
       const perteneceAProveedor = userProveedorId && user.proveedorId === userProveedorId;
 
       if (!perteneceAEmpresa && !perteneceAProveedor) {
-        throw new UnauthorizedException('No tienes acceso a este usuario');
+        throw new ForbiddenException(`No tienes acceso al usuario con ID ${id}`);
       }
     }
 
     return user;
   }
 
-  async update(id: string, dto: UpdateUsuarioDto) {
-    // Buscamos el usuario primero para validar su existencia y datos actuales
+  async update(id: string, dto: UpdateUsuarioDto, currentUserRole: RolUsuario) {
     const user = await this.findOne(id, RolUsuario.SUPER_ADMIN);
 
     if (dto.email && dto.email !== user.email) {
       const existing = await this.prisma.usuario.findUnique({ where: { email: dto.email } });
       if (existing) {
-        throw new ConflictException('El email ya está registrado');
+        throw new ConflictException(`El email ${dto.email} ya está registrado`);
       }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dto.email)) {
+        throw new BadRequestException('Formato de email inválido');
+      }
+    }
+
+    if ((dto.rol || dto.empresaId || dto.proveedorId) && currentUserRole !== RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo super admins pueden cambiar rol o asignaciones de empresa/proveedor');
     }
 
     const updateData: Prisma.UsuarioUpdateInput = { ...dto };
@@ -178,8 +193,17 @@ export class UsuariosService {
 
   async updateDisponibilidad(userId: string, dto: { estado: EstadoDisponibilidad; ubicacion?: { lat: number; lng: number } }) {
     const user = await this.prisma.usuario.findUnique({ where: { id: userId } });
-    if (!user || !['PROVEEDOR_OPERADOR'].includes(user.rol)) {
-      throw new ForbiddenException('Solo operadores de proveedor pueden actualizar disponibilidad');
+    if (!user || user.rol !== RolUsuario.PROVEEDOR_OPERADOR) {
+      throw new ForbiddenException(`Usuario ${userId} no es operador de proveedor o no existe`);
+    }
+
+    if (dto.ubicacion) {
+      if (
+        typeof dto.ubicacion.lat !== 'number' || dto.ubicacion.lat < -90 || dto.ubicacion.lat > 90 ||
+        typeof dto.ubicacion.lng !== 'number' || dto.ubicacion.lng < -180 || dto.ubicacion.lng > 180
+      ) {
+        throw new BadRequestException('Coordenadas de ubicación inválidas');
+      }
     }
 
     return this.prisma.usuario.update({
@@ -197,12 +221,16 @@ export class UsuariosService {
     });
 
     if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+      throw new NotFoundException(`Usuario ${userId} no encontrado`);
     }
 
     const isValid = await bcrypt.compare(dto.oldPassword, user.password);
     if (!isValid) {
-      throw new ConflictException('Contraseña actual incorrecta');
+      throw new UnauthorizedException('Contraseña actual incorrecta');
+    }
+
+    if (dto.newPassword.length < 8) {
+      throw new BadRequestException('Nueva contraseña debe tener al menos 8 caracteres');
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
@@ -211,15 +239,21 @@ export class UsuariosService {
       where: { id: userId },
       data: { password: hashedPassword },
     });
-
-    return { message: 'Contraseña actualizada exitosamente' };
   }
 
-  async toggleActive(id: string) {
+  async toggleActive(id: string, currentUser: { id: string; rol: RolUsuario }) {
     const user = await this.prisma.usuario.findUnique({ where: { id } });
     
     if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+      throw new NotFoundException(`Usuario ${id} no encontrado`);
+    }
+
+    if (user.rol === RolUsuario.SUPER_ADMIN && currentUser.rol !== RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('No puedes desactivar super admins');
+    }
+
+    if (id === currentUser.id) {
+      throw new ForbiddenException('No puedes desactivarte a ti mismo');
     }
 
     return this.prisma.usuario.update({
@@ -228,7 +262,21 @@ export class UsuariosService {
     });
   }
 
-  async softDelete(id: string) {
+  async softDelete(id: string, currentUserRole: RolUsuario) {
+    if (currentUserRole !== RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo super admins pueden realizar soft-delete');
+    }
+
+    const user = await this.prisma.usuario.findUnique({ where: { id } });
+    
+    if (!user) {
+      throw new NotFoundException(`Usuario ${id} no encontrado`);
+    }
+
+    if (user.deletedAt) {
+      throw new BadRequestException(`Usuario ${id} ya está soft-deleted`);
+    }
+
     return this.prisma.usuario.update({
       where: { id },
       data: { isActive: false, deletedAt: new Date() },

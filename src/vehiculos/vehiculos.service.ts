@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehiculoDto } from './dto/create-vehiculo.dto';
@@ -24,18 +25,22 @@ export class VehiculosService {
         throw new ConflictException('La patente ya está registrada');
       }
 
-      // Verificar permisos
+      // Verificar permisos: Solo SUPER_ADMIN o usuario de la misma empresa
       if (userRole !== RolUsuario.SUPER_ADMIN && dto.empresaId !== userEmpresaId) {
         throw new ForbiddenException('No puedes crear vehículos para otra empresa');
       }
 
-      // Verificar que la empresa existe
+      // Verificar que la empresa existe y está activa
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: dto.empresaId },
       });
 
       if (!empresa) {
         throw new NotFoundException('Empresa no encontrada');
+      }
+
+      if (!empresa.isActive) {
+        throw new BadRequestException('La empresa seleccionada está inactiva');
       }
 
       return this.prisma.vehiculo.create({
@@ -48,7 +53,7 @@ export class VehiculosService {
     }
 
     async findAll(userRole: string, empresaId?: string) {
-      const where: any = {};
+      const where: any = { estado: { not: EstadoVehiculo.INACTIVO } };
 
       // Filtrar por empresa según el rol
       if (userRole !== RolUsuario.SUPER_ADMIN) {
@@ -91,24 +96,51 @@ export class VehiculosService {
         throw new NotFoundException('Vehículo no encontrado');
       }
 
-      // Verificar acceso
-      if (
-        userRole !== RolUsuario.SUPER_ADMIN &&
-        vehiculo.empresaId !== userEmpresaId
-      ) {
+      if (userRole !== RolUsuario.SUPER_ADMIN && vehiculo.empresaId !== userEmpresaId) {
         throw new ForbiddenException('No tienes acceso a este vehículo');
+      }
+
+      if (vehiculo.estado === EstadoVehiculo.INACTIVO) {
+        throw new BadRequestException('Este vehículo está inactivo');
       }
 
       return vehiculo;
     }
 
-    async update(id: string, dto: Partial<CreateVehiculoDto>) {
+    async update(id: string, dto: Partial<CreateVehiculoDto>, userRole: RolUsuario, userEmpresaId?: string) {
       const vehiculo = await this.prisma.vehiculo.findUnique({
         where: { id },
       });
 
       if (!vehiculo) {
         throw new NotFoundException('Vehículo no encontrado');
+      }
+
+      // Verificar acceso
+      if (
+        userRole !== RolUsuario.SUPER_ADMIN &&
+        vehiculo.empresaId !== userEmpresaId
+      ) {
+        throw new ForbiddenException('No tienes permiso para actualizar este vehículo');
+      }
+
+      // Si se intenta cambiar la empresa, validar
+      if (dto.empresaId && dto.empresaId !== vehiculo.empresaId) {
+        if (userRole !== RolUsuario.SUPER_ADMIN) {
+          throw new ForbiddenException('No puedes cambiar la empresa del vehículo');
+        }
+
+        const nuevaEmpresa = await this.prisma.empresa.findUnique({
+          where: { id: dto.empresaId },
+        });
+
+        if (!nuevaEmpresa) {
+          throw new NotFoundException('Nueva empresa no encontrada');
+        }
+
+        if (!nuevaEmpresa.isActive) {
+          throw new BadRequestException('La nueva empresa está inactiva');
+        }
       }
 
       // Si se cambia la patente, verificar que no exista
@@ -132,7 +164,7 @@ export class VehiculosService {
       });
     }
 
-    async remove(id: string) {
+    async remove(id: string, userRole: RolUsuario, userEmpresaId?: string) {
       const vehiculo = await this.prisma.vehiculo.findUnique({
         where: { id },
       });
@@ -141,14 +173,22 @@ export class VehiculosService {
         throw new NotFoundException('Vehículo no encontrado');
       }
 
-      // Cambiar estado a INACTIVO
+      // Verificar acceso
+      if (
+        userRole !== RolUsuario.SUPER_ADMIN &&
+        vehiculo.empresaId !== userEmpresaId
+      ) {
+        throw new ForbiddenException('No tienes permiso para inactivar este vehículo');
+      }
+
+      // Cambiar estado a INACTIVO (soft delete alineado con el modelo)
       return this.prisma.vehiculo.update({
         where: { id },
         data: { estado: EstadoVehiculo.INACTIVO },
       });
     }
 
-    async getHistorial(id: string, userRole: string, userEmpresaId?: string) {
+    async getHistorial(id: string, userRole: RolUsuario, userEmpresaId?: string) {
       const vehiculo = await this.prisma.vehiculo.findUnique({
         where: { id },
       });
