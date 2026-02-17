@@ -12,24 +12,45 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         private prisma: PrismaService,
     ) {
         super({
-        jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-        ignoreExpiration: false,
-        // Solución 1: Usar '!' para asegurar que no es undefined 
-        // o un string vacío como fallback
-        secretOrKey: config.get<string>('JWT_SECRET') || 'secret_missing_in_env',
+            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            ignoreExpiration: false,
+            secretOrKey: config.get<string>('JWT_SECRET') || 'secret_missing_in_env',
         });
     }
 
     async validate(payload: JwtPayload) {
-        const user = await this.prisma.usuario.findUnique({
-        where: { id: payload.sub },
-        });
-
-        // Solución 2: Cambiar .activo por .isActive según el error de TS
-        if (!user || !user.isActive) { 
-        throw new UnauthorizedException('Usuario no autorizado');
+        if (!payload.sub) {
+        throw new UnauthorizedException('Token inválido: falta subject (sub)');
         }
 
-        return payload; 
+        const user = await this.prisma.usuario.findUnique({
+            where: { id: payload.sub },
+            select: {
+                id: true,
+                email: true,
+                rol: true,
+                isActive: true,
+                empresaId: true,
+                proveedorId: true,
+                // NO traigas password ni campos sensibles
+            }
+        });
+
+        if (!user) {
+        throw new UnauthorizedException('Usuario asociado al token no encontrado');
+        }
+
+        if (!user.isActive) {
+        throw new UnauthorizedException('Cuenta de usuario desactivada');
+        }
+
+        return {
+        id: user.id,
+        email: user.email,
+        rol: user.rol,
+        empresaId: user.empresaId,
+        proveedorId: user.proveedorId,
+        sub: payload.sub, // mantenemos compatibilidad si algún lugar lo espera
+        };
     }
 }

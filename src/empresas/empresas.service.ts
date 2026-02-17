@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
@@ -12,7 +13,11 @@ import { RolUsuario } from '@prisma/client';
 export class EmpresasService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateEmpresaDto) {
+  async create(dto: CreateEmpresaDto, userRole: RolUsuario) {
+    // Validación adicional: Solo SUPER_ADMIN puede crear empresas
+    if (userRole !== RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo super administradores pueden crear empresas');
+    }
     // Verificar CUIT único
     const existingEmpresa = await this.prisma.empresa.findUnique({
       where: { cuit: dto.cuit },
@@ -28,9 +33,18 @@ export class EmpresasService {
         where: { id: dto.planId },
       });
 
-      if (!plan || !plan.isActive) {
-        throw new NotFoundException('Plan no encontrado o inactivo');
+      if (!plan) {
+          throw new NotFoundException('Plan no encontrado');
+        }
+
+      if (!plan.isActive) {
+        throw new BadRequestException('El plan seleccionado está inactivo');
       }
+    }
+
+    // Asegurarse de que no falten campos requeridos (aunque DTO lo maneja, agregamos mensajes simples)
+    if (!dto.razonSocial || !dto.cuit || !dto.telefono || !dto.email || !dto.direccion) {
+      throw new BadRequestException('Faltan campos requeridos: razón social, CUIT, teléfono, email o dirección');
     }
 
     return this.prisma.empresa.create({
@@ -39,13 +53,16 @@ export class EmpresasService {
     });
   }
 
-  async findAll(userRole: string, empresaId?: string) {
-    // Si es ADMIN, solo ve su propia empresa
-    if (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) {
-      if (!empresaId) {
-        throw new ForbiddenException('No tienes empresa asignada');
-      }
+async findAll(userRole: RolUsuario, empresaId?: string) {
+    // Validación: Si no es SUPER_ADMIN y no tiene empresa asignada
+    if (
+      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) && !empresaId
+    ) {
+      throw new ForbiddenException('No tienes una empresa asignada');
+    }
 
+    // Si es CLIENTE_ADMIN o CLIENTE_OPERADOR, solo ve su propia empresa
+    if (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) {
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: empresaId },
         include: {
@@ -59,10 +76,14 @@ export class EmpresasService {
         },
       });
 
+      if (!empresa) {
+        throw new NotFoundException('Empresa no encontrada');
+      }
+
       return [empresa];
     }
 
-    // SUPER_ADMIN ve todas
+    // SUPER_ADMIN ve todas las activas
     return this.prisma.empresa.findMany({
       where: { isActive: true },
       include: {
@@ -79,15 +100,7 @@ export class EmpresasService {
     });
   }
 
-  async findOne(id: string, userRole: string, userEmpresaId?: string) {
-    // Verificar acceso
-    if (
-      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
-      id !== userEmpresaId
-    ) {
-      throw new ForbiddenException('No tienes acceso a esta empresa');
-    }
-
+async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id },
       include: {
@@ -98,8 +111,6 @@ export class EmpresasService {
             nombre: true,
             apellido: true,
             email: true,
-            rol: true,
-            isActive: true,
           },
         },
         _count: {
@@ -115,16 +126,28 @@ export class EmpresasService {
       throw new NotFoundException('Empresa no encontrada');
     }
 
+    // Verificar acceso
+    if (
+      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
+      id !== userEmpresaId
+    ) {
+      throw new ForbiddenException('No tienes acceso a esta empresa');
+    }
+
+    if (!empresa.isActive) {
+      throw new BadRequestException('Esta empresa está inactiva');
+    }
+
     return empresa;
   }
 
-  async update(id: string, dto: Partial<CreateEmpresaDto>) {
-    const empresa = await this.prisma.empresa.findUnique({
-      where: { id },
-    });
+  async update(id: string, dto: Partial<CreateEmpresaDto>, userRole: RolUsuario, userEmpresaId?: string) {
+    // Primero, verificar acceso reutilizando findOne (que ya incluye validaciones de acceso y existencia)
+    const empresa = await this.findOne(id, userRole, userEmpresaId);
 
-    if (!empresa) {
-      throw new NotFoundException('Empresa no encontrada');
+    // Validación adicional: Solo SUPER_ADMIN o CLIENTE_ADMIN pueden actualizar
+    if (userRole !== RolUsuario.SUPER_ADMIN && userRole !== RolUsuario.CLIENTE_ADMIN) {
+      throw new ForbiddenException('No tienes permiso para actualizar esta empresa, solo SUPER_ADMIN o CLIENTE_ADMIN pueden actualizar');
     }
 
     // Si se intenta cambiar el CUIT, verificar que no exista
@@ -138,6 +161,21 @@ export class EmpresasService {
       }
     }
 
+    // Si se cambia planId, verificar que exista y esté activo
+    if (dto.planId && dto.planId !== empresa.planId) {
+      const plan = await this.prisma.plan.findUnique({
+        where: { id: dto.planId },
+      });
+
+      if (!plan) {
+        throw new NotFoundException('Plan no encontrado');
+      }
+
+      if (!plan.isActive) {
+        throw new BadRequestException('El plan seleccionado está inactivo');
+      }
+    }
+
     return this.prisma.empresa.update({
       where: { id },
       data: dto,
@@ -145,18 +183,13 @@ export class EmpresasService {
     });
   }
 
-  async remove(id: string) {
-    const empresa = await this.prisma.empresa.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: { solicitudes: true },
-        },
-      },
-    });
+  async remove(id: string, userRole: RolUsuario, userEmpresaId?: string) {
+    // Primero, verificar acceso reutilizando findOne
+    await this.findOne(id, userRole, userEmpresaId);
 
-    if (!empresa) {
-      throw new NotFoundException('Empresa no encontrada');
+    // Validación adicional: Solo SUPER_ADMIN puede eliminar
+    if (userRole !== RolUsuario.SUPER_ADMIN) {
+      throw new ForbiddenException('Solo super administradores pueden eliminar empresas');
     }
 
     // Soft delete
@@ -166,14 +199,9 @@ export class EmpresasService {
     });
   }
 
-  async getVehiculos(id: string, userRole: string, userEmpresaId?: string) {
-    // Verificar acceso
-    if (
-      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
-      id !== userEmpresaId
-    ) {
-      throw new ForbiddenException('No tienes acceso a esta empresa');
-    }
+  async getVehiculos(id: string, userRole: RolUsuario, userEmpresaId?: string) {
+    // Verificar acceso reutilizando findOne
+    await this.findOne(id, userRole, userEmpresaId);
 
     return this.prisma.vehiculo.findMany({
       where: { empresaId: id, estado: { not: 'INACTIVO' } },
@@ -181,14 +209,9 @@ export class EmpresasService {
     });
   }
 
-  async getSolicitudes(id: string, userRole: string, userEmpresaId?: string) {
-    // Verificar acceso
-    if (
-      (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) &&
-      id !== userEmpresaId
-    ) {
-      throw new ForbiddenException('No tienes acceso a esta empresa');
-    }
+  async getSolicitudes(id: string, userRole: RolUsuario, userEmpresaId?: string) {
+    // Verificar acceso reutilizando findOne
+    await this.findOne(id, userRole, userEmpresaId);
 
     return this.prisma.solicitudAuxilio.findMany({
       where: { empresaId: id },

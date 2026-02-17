@@ -15,11 +15,16 @@ export class ProveedoresController {
 
     @Post()
     @Roles(RolUsuario.SUPER_ADMIN)
-    @ApiOperation({ summary: 'Crear proveedor' })
-    @ApiResponse({ status: 201, description: 'Proveedor creado' })
-    @ApiResponse({ status: 409, description: 'CUIT duplicado' })
-    create(@Body() dto: CreateProveedorDto) {
-      return this.proveedoresService.create(dto);
+    @ApiOperation({ summary: 'Crear proveedor (solo staff Auxy)' })
+    @ApiResponse({ status: 201, description: 'Proveedor creado exitosamente' })
+    @ApiResponse({ status: 409, description: 'El CUIT ya está registrado' })
+    @ApiResponse({ status: 400, description: 'Datos inválidos (CUIT, formato, etc.)' })
+    @ApiResponse({ status: 403, description: 'Acceso denegado' })
+    create(
+      @Body() dto: CreateProveedorDto,
+      @CurrentUser() currentUser: { id: string; rol: RolUsuario }, // Mejor: inyectar todo el usuario
+    ) {
+      return this.proveedoresService.create(dto, currentUser);
     }
 
   @Get()

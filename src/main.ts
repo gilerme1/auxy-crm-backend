@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-floating-promises */
-
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -49,12 +48,13 @@ async function bootstrap() {
       .addTag('Proveedores', 'Gestión de proveedores')
       .addTag('Solicitudes', 'Gestión de solicitudes de auxilio')
       .addTag('Planes', 'Gestión de planes')
+      .addTag('Vehículos Proveedor', 'Gestión de vehículos de asistencia')
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
 
-    const port = process.env.PORT || 3000;
+    const port = process.env.PORT || 3001;
     await app.listen(port);
 
     console.log(`🚀 Server running on: http://localhost:${port}/api`);
