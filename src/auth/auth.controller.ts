@@ -9,6 +9,8 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
+import { RegisterClienteDto } from './dto/register-cliente.dto';
+import { RegisterProveedorDto } from './dto/register-proveedor.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -23,6 +25,24 @@ export class AuthController {
     register(@Body() dto: RegisterDto) {
       return this.authService.register(dto);
     }
+
+    @Public()
+    @Post('register/cliente')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiOperation({ summary: 'Registro para empresas/clientes (crea empresa + CLIENTE_ADMIN)' })
+    @ApiResponse({ status: 201, description: 'Usuario y empresa creados exitosamente' })
+    registerEmpresa(@Body() dto: RegisterClienteDto) {
+      return this.authService.registerCliente(dto);
+    }
+
+    @Public()
+    @Post('register/proveedor')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiOperation({ summary: 'Registro para proveedores (crea proveedor + PROVEEDOR_ADMIN)' })
+    @ApiResponse({ status: 201, description: 'Usuario y proveedor creados exitosamente' })
+    registerProveedor(@Body() dto: RegisterProveedorDto) {
+      return this.authService.registerProveedor(dto);
+  }
 
     @Public()
     @Post('login')

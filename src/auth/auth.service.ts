@@ -10,11 +10,16 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
+import { EmpresasService } from '../empresas/empresas.service';
+import { ProveedoresService } from '../proveedores/proveedores.service';
+import { RegisterClienteDto } from './dto/register-cliente.dto';
+import { RegisterProveedorDto } from './dto/register-proveedor.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma, RolUsuario } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +27,8 @@ export class AuthService {
       private prisma: PrismaService,
       private jwtService: JwtService,
       private config: ConfigService,
+      private empresasService: EmpresasService,
+      private proveedoresService: ProveedoresService,
     ) {}
 
   async register(dto: RegisterDto) {
@@ -137,6 +144,126 @@ export class AuthService {
       user,
       ...tokens,
     };
+  }
+
+  // ───────────────────────────────────────────────
+  // Registro self-service CLIENTE
+  // ───────────────────────────────────────────────
+  async registerCliente(dto: RegisterClienteDto) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Validaciones de unicidad (fuera o dentro de tx, pero mejor fuera para mejor mensaje)
+      await this.checkEmailUnique(dto.email);
+      await this.empresasService.checkCuitUnique(dto.cuit); // asumiendo que agregaste este método
+
+      if (!dto.contactoTelefono) {
+        throw new BadRequestException('El teléfono de contacto de la empresa es obligatorio');
+      }
+
+      // 2. Crear empresa (transaccional)
+      const empresa = await this.empresasService.createInTransaction(tx, {
+        razonSocial: dto.razonSocial,
+        cuit: dto.cuit,
+        direccion: dto.direccion,
+        email: dto.contactoEmail,
+        telefono: dto.contactoTelefono,
+        planId: dto.planId, 
+      });
+
+      // 3. Crear usuario con rol fijo
+      const hashedPassword = await bcrypt.hash(dto.password, 12);
+      const usuario = await tx.usuario.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          nombre: dto.nombre,
+          apellido: dto.apellido,
+          telefono: dto.telefono,
+          rol: RolUsuario.CLIENTE_ADMIN,
+          empresaId: empresa.id,
+          proveedorId: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          apellido: true,
+          rol: true,
+          empresaId: true,
+        },
+      });
+
+      // 4. Generar tokens (auto-login)
+      const tokens = await this.generateTokens(usuario, tx);
+
+      return {
+        message: 'Empresa y cuenta de administrador creadas exitosamente',
+        user: usuario,
+        empresa: { 
+          id: empresa.id, 
+          razonSocial: empresa.razonSocial 
+        },
+        ...tokens,
+      };
+    });
+  }
+
+  // ───────────────────────────────────────────────
+  // Registro self-service PROVEEDOR (muy similar)
+  // ───────────────────────────────────────────────
+  async registerProveedor(dto: RegisterProveedorDto) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.checkEmailUnique(dto.email);
+      await this.proveedoresService.checkCuitUnique(dto.cuit); // asumiendo método agregado
+
+      const proveedor = await this.proveedoresService.createInTransaction(tx, {
+        razonSocial: dto.razonSocial,
+        cuit: dto.cuit,
+        email: dto.contactoEmail,
+        telefono: dto.contactoTelefono,
+        direccion: dto.direccion,
+        serviciosOfrecidos: dto.serviciosOfrecidos,
+        zonasCobertura: dto.zonasCobertura ? JSON.stringify(dto.zonasCobertura) : null,
+      });
+
+      const hashedPassword = await bcrypt.hash(dto.password, 12);
+      const usuario = await tx.usuario.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          nombre: dto.nombre,
+          apellido: dto.apellido,
+          telefono: dto.telefono,
+          rol: RolUsuario.PROVEEDOR_ADMIN,
+          empresaId: null,
+          proveedorId: proveedor.id,
+        },
+        select: {           
+          id: true,
+          email: true,
+          nombre: true,
+          apellido: true,
+          rol: true,
+          empresaId: true, 
+        },
+      });
+
+      const tokens = await this.generateTokens(usuario, tx);
+
+      return {
+        message: 'Proveedor y cuenta de administrador creados exitosamente',
+        user: usuario,
+        proveedor: { 
+          id: proveedor.id, 
+          razonSocial: proveedor.razonSocial 
+        },
+        ...tokens,
+      };
+    });
+  }
+
+  private async checkEmailUnique(email: string) {
+    const exists = await this.prisma.usuario.findUnique({ where: { email } });
+    if (exists) throw new ConflictException('El email ya está registrado');
   }
 
   async login(dto: LoginDto) {
@@ -261,7 +388,7 @@ export class AuthService {
     return user;
   }
 
-  private async generateTokens(user: any) {
+  private async generateTokens(user: any, tx?: Prisma.TransactionClient) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -270,23 +397,23 @@ export class AuthService {
       proveedorId: user.proveedorId,
     };
 
-    // Access token (corta duración)
     const accessToken = this.jwtService.sign(payload, {
       secret: this.config.get('JWT_SECRET'),
       expiresIn: this.config.get('JWT_EXPIRES_IN') || '30m',
     });
 
-    // Refresh token (larga duración)
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN') || '7d',
     });
 
-    // Guardar refresh token en BD
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 días
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await this.prisma.refreshToken.create({
+    // Usa tx si existe, sino el cliente global
+    const prismaClient = tx || this.prisma;
+
+    await prismaClient.refreshToken.create({
       data: {
         token: refreshToken,
         usuarioId: user.id,
@@ -294,9 +421,6 @@ export class AuthService {
       },
     });
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 }

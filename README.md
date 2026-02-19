@@ -14,7 +14,7 @@ API REST desarrollada con NestJS, Prisma y PostgreSQL para gestión de asistenci
 
 - Node.js 18+
 - PostgreSQL 14+
-- npm o yarn
+- npm 
 
 ### Instalación
 

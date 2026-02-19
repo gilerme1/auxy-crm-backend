@@ -43,11 +43,11 @@ export class ProveedoresService {
       throw new BadRequestException('La razón social es obligatoria');
     }
 
-    try {
-      JSON.parse(dto.zonasCobertura as any); // Asegurar JSON válido
-    } catch {
-      throw new BadRequestException('El campo zonasCobertura debe ser un JSON válido');
-    }
+    // try {
+    //   JSON.parse(dto.zonasCobertura as any); // Asegurar JSON válido
+    // } catch {
+    //   throw new BadRequestException('El campo zonasCobertura debe ser un JSON válido');
+    // }
     if (!Array.isArray(dto.serviciosOfrecidos) || dto.serviciosOfrecidos.length === 0) {
       throw new BadRequestException('Debe especificar al menos un servicio ofrecido');
     }
@@ -57,6 +57,37 @@ export class ProveedoresService {
     });
   }
 
+  async createInTransaction(
+    tx: Prisma.TransactionClient,
+    dto: CreateProveedorDto,
+  ) {
+    const existing = await tx.proveedor.findUnique({
+      where: { cuit: dto.cuit },
+    });
+    if (existing) {
+      throw new ConflictException('El CUIT ya está registrado');
+    }
+
+    if (!dto.razonSocial?.trim()) {
+      throw new BadRequestException('La razón social es obligatoria');
+    }
+
+    if (!Array.isArray(dto.serviciosOfrecidos) || dto.serviciosOfrecidos.length === 0) {
+      throw new BadRequestException('Debe especificar al menos un servicio ofrecido');
+    }
+
+    // Opcional: validar JSON de zonasCobertura
+    if (dto.zonasCobertura) {
+      try {
+        JSON.parse(dto.zonasCobertura as any);
+      } catch {
+        throw new BadRequestException('El campo zonasCobertura debe ser un JSON válido');
+      }
+    }
+
+    return tx.proveedor.create({ data: dto });
+  }
+  
   async findAll(userRole: RolUsuario, activo?: boolean, userProveedorId?: string) {
     // CORRECCIÓN: Usamos el tipo específico de Prisma en lugar de 'any'
     const where: Prisma.ProveedorWhereInput = { deletedAt: null };
@@ -209,5 +240,14 @@ export class ProveedoresService {
           : 0,
       },
     };
+  }
+
+  async checkCuitUnique(cuit: string): Promise<void> {
+    const existing = await this.prisma.proveedor.findUnique({
+      where: { cuit },
+    });
+    if (existing) {
+      throw new ConflictException(`El CUIT ${cuit} ya está registrado en un proveedor`);
+    }
   }
 }

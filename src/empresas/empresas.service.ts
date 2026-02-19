@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
-import { RolUsuario } from '@prisma/client';
+import { Prisma, RolUsuario } from '@prisma/client';
 
 @Injectable()
 export class EmpresasService {
@@ -48,6 +48,36 @@ export class EmpresasService {
     }
 
     return this.prisma.empresa.create({
+      data: dto,
+      include: { plan: true },
+    });
+  }
+
+  async createInTransaction(
+    tx: Prisma.TransactionClient,
+    dto: CreateEmpresaDto,
+  ) {
+    // Reutilizamos las mismas validaciones que en create normal
+    // (excepto el chequeo de rol, porque aquí no hay usuario autenticado)
+
+    const existingEmpresa = await tx.empresa.findUnique({
+      where: { cuit: dto.cuit },
+    });
+    if (existingEmpresa) {
+      throw new ConflictException('El CUIT ya está registrado');
+    }
+
+    if (dto.planId) {
+      const plan = await tx.plan.findUnique({ where: { id: dto.planId } });
+      if (!plan) throw new NotFoundException('Plan no encontrado');
+      if (!plan.isActive) throw new BadRequestException('El plan seleccionado está inactivo');
+    }
+
+    if (!dto.razonSocial || !dto.cuit || !dto.telefono || !dto.email || !dto.direccion) {
+      throw new BadRequestException('Faltan campos requeridos: razón social, CUIT, teléfono, email o dirección');
+    }
+
+    return tx.empresa.create({
       data: dto,
       include: { plan: true },
     });
@@ -228,4 +258,14 @@ async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
       take: 50,
     });
   }
+
+  async checkCuitUnique(cuit: string): Promise<void> {
+    const existing = await this.prisma.empresa.findUnique({
+      where: { cuit },
+    });
+    if (existing) {
+      throw new ConflictException(`El CUIT ${cuit} ya está registrado en una empresa`);
+    }
+  }
+
 }
