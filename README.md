@@ -37,8 +37,8 @@ npx prisma migrate dev
 npm run start:dev
 ```
 
-La API estará disponible en `http://localhost:3000/api/v1`
-Documentación Swagger: `http://localhost:3000/api/docs`
+La API estará disponible en `http://localhost:3001/api/v1`
+Documentación Swagger: `http://localhost:3001/api/docs`
 
 ## 📁 Estructura del Proyecto
 
@@ -47,7 +47,7 @@ src/
 ├── auth/           # Autenticación y autorización
 ├── common/         # Decoradores, guards, filtros compartidos
 ├── config/         # Configuración de la aplicación
-├── empresas/       # Gestión de empresas
+├── clientes/       # Gestion de clientes
 ├── prisma/         # Cliente Prisma
 ├── proveedores/    # Gestión de proveedores
 ├── solicitudes/    # Gestión de solicitudes de auxilio (core)
@@ -142,11 +142,11 @@ POST /api/v1/solicitudes/{id}/calificar
 }
 ```
 
-### Empresas
+### Clientes
 
 ```bash
-# Crear empresa
-POST /api/v1/empresas
+# Crear cliente
+POST /api/v1/clientes
 {
   "razonSocial": "Transportes ABC S.A.",
   "cuit": "21123456789",
@@ -156,14 +156,14 @@ POST /api/v1/empresas
   "planId": "uuid"
 }
 
-# Listar empresas
-GET /api/v1/empresas
+# Listar clientes
+GET /api/v1/clientes
 
 # Vehículos de empresa
-GET /api/v1/empresas/{id}/vehiculos
+GET /api/v1/clientes/{id}/vehiculos
 
 # Solicitudes de empresa
-GET /api/v1/empresas/{id}/solicitudes
+GET /api/v1/clientes/{id}/solicitudes
 ```
 
 ### Vehículos
@@ -230,7 +230,7 @@ COPY . .
 RUN npm run build
 RUN npx prisma generate
 
-EXPOSE 3000
+EXPOSE 3001
 
 CMD ["npm", "run", "start:prod"]
 ```
@@ -283,7 +283,7 @@ GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 # App
-PORT=3000
+PORT=3001
 NODE_ENV=production
 CORS_ORIGIN=https://app.auxy.com
 ```
@@ -307,7 +307,7 @@ nest g service nombre          # Crear service
 
 La documentación completa de la API está disponible en:
 
-- Desarrollo: <http://localhost:3000/api/docs>
+- Desarrollo: <http://localhost:3001/api/docs>
 - Producción: <https://api.auxy.com/docs>
 
 ## 🐛 Debugging
@@ -329,3 +329,4 @@ Para debugging con VSCode, crear `.vscode/launch.json`:
   ]
 }
 ```
+

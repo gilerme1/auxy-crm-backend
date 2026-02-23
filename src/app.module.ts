@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
-import { EmpresasModule } from './empresas/empresas.module';
+import { ClientesModule } from './clientes/clientes.module';
 import { VehiculosModule } from './vehiculos/vehiculos.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
@@ -22,7 +22,7 @@ import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveed
     PrismaModule,
     AuthModule,
     UsuariosModule,
-    EmpresasModule,
+    ClientesModule,
     VehiculosModule,
     ProveedoresModule,
     SolicitudesModule,

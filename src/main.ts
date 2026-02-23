@@ -43,7 +43,7 @@ async function bootstrap() {
       .addBearerAuth()
       .addTag('Auth', 'Endpoints de autenticación')
       .addTag('Usuarios', 'Gestión de usuarios')
-      .addTag('Empresas', 'Gestión de empresas')
+      .addTag('Clientes', 'Gestion de clientes')
       .addTag('Vehículos', 'Gestión de vehículos')
       .addTag('Proveedores', 'Gestión de proveedores')
       .addTag('Solicitudes', 'Gestión de solicitudes de auxilio')
@@ -62,3 +62,4 @@ async function bootstrap() {
 }
 
 bootstrap();
+

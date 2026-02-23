@@ -26,7 +26,7 @@ B. Seguridad y Autorización (Guards)
 El sistema utiliza un RBAC (Role-Based Access Control) estricto. 
 La IA debe verificar siempre la presencia de decoradores de roles en todos los endpoints que requieren autorización.
 
-Roles: SUPER_ADMIN, CLIENTE_ADMIN, PROVEEDOR_ADMIN, PROVEEDOR_OPERADOR.
+Roles: SUPER_ADMIN, CLIENTE_ADMIN, PROVEEDOR_ADMIN, CLIENTE_OPERADOR, PROVEEDOR_OPERADOR.
 
 Implementación: Uso obligatorio de Guards personalizados para proteger rutas según el rol del usuario.
 

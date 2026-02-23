@@ -10,43 +10,43 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { EmpresasService } from './empresas.service';
-import { CreateEmpresaDto } from './dto/create-empresa.dto';
+import { ClientesService } from './clientes.service';
+import { CreateClienteDto } from './dto/create-cliente.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
 
-@ApiTags('Empresas')
+@ApiTags('Clientes')
 @ApiBearerAuth()
-@Controller('empresas')
-export class EmpresasController {
-  constructor(private readonly empresasService: EmpresasService) {}
+@Controller('clientes')
+export class ClientesController {
+  constructor(private readonly clientesService: ClientesService) {}
 
   @Post()
   @Roles(RolUsuario.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Crear empresa' })
+  @ApiOperation({ summary: 'Crear cliente' })
   @ApiResponse({ status: 201, description: 'Empresa creada' })
   @ApiResponse({ status: 409, description: 'CUIT duplicado' })
   @ApiResponse({ status: 403, description: 'No autorizado' })
   create(
-    @Body() dto: CreateEmpresaDto,
+    @Body() dto: CreateClienteDto,
     @CurrentUser('rol') userRole: RolUsuario,           
   ) {
-    return this.empresasService.create(dto, userRole);
+    return this.clientesService.create(dto, userRole);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar empresas' })
+  @ApiOperation({ summary: 'Listar clientes' })
   @ApiResponse({ status: 200, description: 'Lista de empresas' })
   findAll(
     @CurrentUser('rol') userRole: RolUsuario,           // ← tipado como RolUsuario
     @CurrentUser('empresaId') empresaId?: string,
   ) {
-    return this.empresasService.findAll(userRole, empresaId);
+    return this.clientesService.findAll(userRole, empresaId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener empresa por ID' })
+  @ApiOperation({ summary: 'Obtener cliente por ID' })
   @ApiResponse({ status: 200, description: 'Empresa encontrada' })
   @ApiResponse({ status: 404, description: 'Empresa no encontrada' })
   @ApiResponse({ status: 403, description: 'No autorizado' })
@@ -55,28 +55,28 @@ export class EmpresasController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.empresasService.findOne(id, userRole, userEmpresaId);
+    return this.clientesService.findOne(id, userRole, userEmpresaId);
   }
 
   @Patch(':id')
   @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN)
-  @ApiOperation({ summary: 'Actualizar empresa' })
+  @ApiOperation({ summary: 'Actualizar cliente' })
   @ApiResponse({ status: 200, description: 'Empresa actualizada' })
   @ApiResponse({ status: 403, description: 'No autorizado' })
   @ApiResponse({ status: 404, description: 'Empresa no encontrada' })
   update(
     @Param('id') id: string,
-    @Body() dto: Partial<CreateEmpresaDto>,
+    @Body() dto: Partial<CreateClienteDto>,
     @CurrentUser('rol') userRole: RolUsuario,           // ← agregado
     @CurrentUser('empresaId') userEmpresaId?: string,   // ← agregado
   ) {
-    return this.empresasService.update(id, dto, userRole, userEmpresaId);
+    return this.clientesService.update(id, dto, userRole, userEmpresaId);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Roles(RolUsuario.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Eliminar empresa (soft delete)' })
+  @ApiOperation({ summary: 'Eliminar cliente (soft delete)' })
   @ApiResponse({ status: 200, description: 'Empresa eliminada' })
   @ApiResponse({ status: 403, description: 'No autorizado' })
   @ApiResponse({ status: 404, description: 'Empresa no encontrada' })
@@ -85,26 +85,27 @@ export class EmpresasController {
     @CurrentUser('rol') userRole: RolUsuario,           // ← agregado
     @CurrentUser('empresaId') userEmpresaId?: string,   // ← agregado (aunque no siempre se usa)
   ) {
-    return this.empresasService.remove(id, userRole, userEmpresaId);
+    return this.clientesService.remove(id, userRole, userEmpresaId);
   }
 
   @Get(':id/vehiculos')
-  @ApiOperation({ summary: 'Obtener vehículos de la empresa' })
+  @ApiOperation({ summary: 'Obtener vehículos del cliente' })
   getVehiculos(
     @Param('id') id: string,
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.empresasService.getVehiculos(id, userRole, userEmpresaId);
+    return this.clientesService.getVehiculos(id, userRole, userEmpresaId);
   }
 
   @Get(':id/solicitudes')
-  @ApiOperation({ summary: 'Obtener solicitudes de la empresa' })
+  @ApiOperation({ summary: 'Obtener solicitudes del cliente' })
   getSolicitudes(
     @Param('id') id: string,
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.empresasService.getSolicitudes(id, userRole, userEmpresaId);
+    return this.clientesService.getSolicitudes(id, userRole, userEmpresaId);
   }
 }
+

@@ -4,19 +4,222 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgresql://auxydb_user:FVDXjCQjnOg616DIfW8aY819XNV6wiNU@dpg-d67i7vggjchc73an7v6g-a.oregon-postgres.render.com/auxydb?sslmode=require"
 }
 
-// ============================================
-//                  ENUMS 
-// ============================================
+model Usuario {
+  id                   String                @id @default(uuid())
+  email                String                @unique
+  password             String
+  nombre               String
+  apellido             String
+  telefono             String?
+  rol                  RolUsuario            @default(CLIENTE_OPERADOR)
+  isActive             Boolean               @default(true)
+  deletedAt            DateTime?
+  empresaId            String?
+  proveedorId          String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  estadoDisponibilidad EstadoDisponibilidad? @default(DESCONECTADO)
+  ultimaUbicacion      Json?
+  refreshTokens        RefreshToken[]
+  solicitudesAtendidas SolicitudAuxilio[]    @relation("SolicitudAtendedor")
+  solicitudesCreadas   SolicitudAuxilio[]    @relation("SolicitudCreador")
+  empresa              Empresa?              @relation(fields: [empresaId], references: [id])
+  proveedor            Proveedor?            @relation(fields: [proveedorId], references: [id])
+
+  @@index([email])
+  @@index([empresaId])
+  @@index([proveedorId])
+  @@index([rol])
+  @@index([estadoDisponibilidad])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  usuarioId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+model Empresa {
+  id          String             @id @default(uuid())
+  razonSocial String
+  cuit        String             @unique
+  telefono    String
+  email       String
+  direccion   String
+  isActive    Boolean            @default(true)
+  deletedAt   DateTime?
+  planId      String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  plan        Plan?              @relation(fields: [planId], references: [id])
+  solicitudes SolicitudAuxilio[]
+  usuarios    Usuario[]
+  vehiculos   Vehiculo[]
+
+  @@index([cuit])
+  @@index([planId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("empresas")
+}
+
+model Plan {
+  id                 String    @id @default(uuid())
+  nombre             String
+  descripcion        String?
+  serviciosIncluidos String[]
+  precioMensual      Decimal   @db.Decimal(10, 2)
+  isActive           Boolean   @default(true)
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  empresas           Empresa[]
+
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("planes")
+}
+
+model Vehiculo {
+  id          String             @id @default(uuid())
+  patente     String             @unique
+  marca       String
+  modelo      String
+  año        Int
+  tipo        TipoVehiculo
+  isActive    Boolean            @default(true)
+  deletedAt   DateTime?
+  estado      EstadoVehiculo     @default(ACTIVO)
+  empresaId   String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  solicitudes SolicitudAuxilio[]
+  empresa     Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([patente])
+  @@index([empresaId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("vehiculos")
+}
+
+model Proveedor {
+  id                   String              @id @default(uuid())
+  razonSocial          String
+  cuit                 String              @unique
+  email                String
+  telefono             String
+  direccion            String?
+  serviciosOfrecidos   String[]
+  zonasCobertura       Json?
+  calificacionPromedio Decimal?            @db.Decimal(3, 2)
+  isActive             Boolean             @default(true)
+  deletedAt            DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  solicitudes          SolicitudAuxilio[]
+  usuarios             Usuario[]
+  vehiculosProveedor   VehiculoProveedor[]
+
+  @@index([cuit])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("proveedores")
+}
+
+model VehiculoProveedor {
+  id          String                @id @default(uuid())
+  patente     String                @unique
+  marca       String
+  modelo      String
+  año        Int
+  tipo        TipoVehiculoProveedor
+  capacidadKg Int?
+  estado      EstadoVehiculo        @default(ACTIVO)
+  proveedorId String
+  isActive    Boolean               @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  solicitudes SolicitudAuxilio[]    @relation("SolicitudVehiculoProveedor")
+  proveedor   Proveedor             @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+
+  @@index([patente])
+  @@index([proveedorId])
+  @@index([tipo])
+  @@index([estado])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("vehiculos_proveedor")
+}
+
+model SolicitudAuxilio {
+  id                  String             @id @default(uuid())
+  numero              String             @unique @default(cuid())
+  tipo                TipoAuxilio
+  estado              EstadoSolicitud    @default(PENDIENTE)
+  prioridad           Prioridad          @default(MEDIA)
+  latitud             Decimal            @db.Decimal(10, 8)
+  longitud            Decimal            @db.Decimal(11, 8)
+  direccion           String
+  observaciones       String?
+  fotos               String[]
+  costoEstimado       Decimal?           @db.Decimal(10, 2)
+  costoFinal          Decimal?           @db.Decimal(10, 2)
+  calificacion        Int?
+  comentarioCliente   String?
+  fechaSolicitud      DateTime           @default(now())
+  fechaAsignacion     DateTime?
+  fechaInicio         DateTime?
+  fechaFinalizacion   DateTime?
+  fechaCancelacion    DateTime?
+  motivoCancelacion   String?
+  isActive            Boolean            @default(true)
+  deletedAt           DateTime?
+  empresaId           String
+  vehiculoId          String
+  proveedorId         String?
+  solicitadoPorId     String
+  atendidoPorId       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  vehiculoProveedorId String?
+  atendidoPor         Usuario?           @relation("SolicitudAtendedor", fields: [atendidoPorId], references: [id])
+  empresa             Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id])
+  solicitadoPor       Usuario            @relation("SolicitudCreador", fields: [solicitadoPorId], references: [id])
+  vehiculo            Vehiculo           @relation(fields: [vehiculoId], references: [id])
+  vehiculoProveedor   VehiculoProveedor? @relation("SolicitudVehiculoProveedor", fields: [vehiculoProveedorId], references: [id])
+
+  @@index([numero])
+  @@index([estado])
+  @@index([empresaId])
+  @@index([vehiculoId])
+  @@index([proveedorId])
+  @@index([fechaSolicitud])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("solicitudes_auxilio")
+}
 
 enum RolUsuario {
-  SUPER_ADMIN           // Staff de Auxy
-  CLIENTE_ADMIN         // Gerente / Admin de flota cliente
-  CLIENTE_OPERADOR      // Chofer / operador de flota cliente (crea solicitudes)
-  PROVEEDOR_ADMIN       // Dueño / gerente de empresa proveedora
-  PROVEEDOR_OPERADOR    // Chofer de grúa / técnico en campo (atiende solicitudes)
+  SUPER_ADMIN
+  CLIENTE_ADMIN
+  CLIENTE_OPERADOR
+  PROVEEDOR_ADMIN
+  PROVEEDOR_OPERADOR
 }
 
 enum TipoVehiculo {
@@ -25,7 +228,6 @@ enum TipoVehiculo {
   CAMION
   MOTO
   OTRO
-  // Opcional: agregar más específicos si el negocio lo requiere (BUS, UTILITARIO, etc.)
 }
 
 enum EstadoVehiculo {
@@ -61,270 +263,17 @@ enum Prioridad {
 }
 
 enum TipoVehiculoProveedor {
-  GRUA                  // Autos/camionetas
-  GRUA_PESADA           // Camiones pesados
-  TECNICO               // Para mecánica en ruta
-  CERRAJERO            
+  GRUA
+  GRUA_PESADA
+  TECNICO
+  CERRAJERO
   OTRO
 }
 
-// Estado de disponibilidad realtime para operadores de proveedor
 enum EstadoDisponibilidad {
   DISPONIBLE
   OCUPADO
   EN_PAUSA
   FUERA_DE_ZONA
   DESCONECTADO
-}
-
-// ============================================
-//                  MODELOS 
-// ============================================
-
-model Usuario {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  nombre    String
-  apellido  String
-  telefono  String?
-
-  rol       RolUsuario @default(CLIENTE_OPERADOR) // Cambiado default a más común
-
-  isActive  Boolean  @default(true)
-  deletedAt DateTime?
-
-  empresaId String?
-  empresa   Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
-
-  proveedorId String?
-  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
-
-  estadoDisponibilidad EstadoDisponibilidad? @default(DESCONECTADO)
-  ultimaUbicacion      Json?                 // { lat: number, lng: number, updatedAt: Date }
-
-  solicitudesCreadas   SolicitudAuxilio[] @relation("SolicitudCreador")
-  solicitudesAtendidas SolicitudAuxilio[] @relation("SolicitudAtendedor")
-
-  refreshTokens RefreshToken[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([email])
-  @@index([empresaId])
-  @@index([proveedorId])
-  @@index([rol])
-  @@index([estadoDisponibilidad])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("usuarios")
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  usuarioId String
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([usuarioId])
-  @@map("refresh_tokens")
-}
-
-model Empresa {
-  id           String   @id @default(uuid())
-  razonSocial  String
-  cuit         String   @unique
-  telefono     String
-  email        String
-  direccion    String
-  
-  isActive     Boolean  @default(true)
-  deletedAt    DateTime?
-  
-  planId       String?
-  plan         Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
-  
-  usuarios     Usuario[]
-  vehiculos    Vehiculo[]
-  solicitudes  SolicitudAuxilio[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([cuit])
-  @@index([planId])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("empresas")
-}
-
-model Plan {
-  id                  String    @id @default(uuid())
-  nombre              String
-  descripcion         String?
-  serviciosIncluidos  String[]
-  precioMensual       Decimal   @db.Decimal(10, 2)
-  
-  isActive            Boolean   @default(true)
-  deletedAt           DateTime?
-  
-  empresas            Empresa[]
-  
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("planes")
-}
-
-model Vehiculo {
-  id        String         @id @default(uuid())
-  patente   String         @unique
-  marca     String
-  modelo    String
-  año       Int
-  tipo      TipoVehiculo
-  
-  isActive  Boolean        @default(true)
-  deletedAt DateTime?
-  
-  estado    EstadoVehiculo @default(ACTIVO)  // Se mantiene para lógica operativa
-  
-  empresaId String
-  empresa   Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  
-  solicitudes SolicitudAuxilio[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([patente])
-  @@index([empresaId])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("vehiculos")
-}
-
-model Proveedor {
-  id                   String   @id @default(uuid())
-  razonSocial          String
-  cuit                 String   @unique
-  email                String
-  telefono             String
-  direccion            String?
-  serviciosOfrecidos   String[]
-  zonasCobertura       Json?
-  calificacionPromedio Decimal? @db.Decimal(3, 2)
-  
-  isActive             Boolean  @default(true)
-  deletedAt            DateTime?
-  
-  usuarios             Usuario[]
-  solicitudes          SolicitudAuxilio[]
-
-  vehiculosProveedor VehiculoProveedor[]
-  
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  @@index([cuit])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("proveedores")
-}
-
-// Recursos del proveedor (grúas, camionetas, etc.)
-model VehiculoProveedor {
-  id          String              @id @default(uuid())
-  patente     String              @unique
-  marca       String
-  modelo      String
-  año         Int
-  tipo        TipoVehiculoProveedor
-
-  capacidadKg Int?                // Ej: 3500, 7000, etc. (para matching)
-  estado      EstadoVehiculo      @default(ACTIVO)
-
-  proveedorId String
-  proveedor    Proveedor           @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
-
-  solicitudes SolicitudAuxilio[]  @relation("SolicitudVehiculoProveedor") // Opcional, si asignamos recurso específico
-
-  isActive    Boolean             @default(true)
-  deletedAt   DateTime?
-
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-
-  @@index([patente])
-  @@index([proveedorId])
-  @@index([tipo])
-  @@index([estado])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("vehiculos_proveedor")
-}
-
-model SolicitudAuxilio {
-  id          String          @id @default(uuid())
-  numero      String          @unique @default(cuid())
-  tipo        TipoAuxilio
-  estado      EstadoSolicitud @default(PENDIENTE)
-  prioridad   Prioridad       @default(MEDIA)
-  
-  latitud     Decimal         @db.Decimal(10, 8)
-  longitud    Decimal         @db.Decimal(11, 8)
-  direccion   String
-  
-  observaciones     String?
-  fotos             String[]
-  costoEstimado     Decimal?  @db.Decimal(10, 2)
-  costoFinal        Decimal?  @db.Decimal(10, 2)
-  calificacion      Int?
-  comentarioCliente String?
-  
-  fechaSolicitud    DateTime  @default(now())
-  fechaAsignacion   DateTime?
-  fechaInicio       DateTime?
-  fechaFinalizacion DateTime?
-  fechaCancelacion  DateTime?
-  motivoCancelacion String?
-  
-  isActive          Boolean   @default(true)
-  deletedAt         DateTime?
-  
-  empresaId   String
-  empresa     Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  
-  vehiculoId  String
-  vehiculo    Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Restrict)
-
-  vehiculoProveedorId String?
-  vehiculoProveedor   VehiculoProveedor? @relation("SolicitudVehiculoProveedor", fields: [vehiculoProveedorId], references: [id], onDelete: SetNull)
-  
-  proveedorId String?
-  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
-  
-  solicitadoPorId String
-  solicitadoPor   Usuario @relation("SolicitudCreador", fields: [solicitadoPorId], references: [id], onDelete: Restrict)
-  
-  atendidoPorId   String?
-  atendidoPor     Usuario? @relation("SolicitudAtendedor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([numero])
-  @@index([estado])
-  @@index([empresaId])
-  @@index([vehiculoId])
-  @@index([proveedorId])
-  @@index([fechaSolicitud])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@map("solicitudes_auxilio")
 }

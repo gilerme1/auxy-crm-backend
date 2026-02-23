@@ -6,14 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEmpresaDto } from './dto/create-empresa.dto';
+import { CreateClienteDto } from './dto/create-cliente.dto';
 import { Prisma, RolUsuario } from '@prisma/client';
 
 @Injectable()
-export class EmpresasService {
+export class ClientesService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateEmpresaDto, userRole: RolUsuario) {
+  async create(dto: CreateClienteDto, userRole: RolUsuario) {
     // Validación adicional: Solo SUPER_ADMIN puede crear empresas
     if (userRole !== RolUsuario.SUPER_ADMIN) {
       throw new ForbiddenException('Solo super administradores pueden crear empresas');
@@ -55,7 +55,7 @@ export class EmpresasService {
 
   async createInTransaction(
     tx: Prisma.TransactionClient,
-    dto: CreateEmpresaDto,
+    dto: CreateClienteDto,
   ) {
     // Reutilizamos las mismas validaciones que en create normal
     // (excepto el chequeo de rol, porque aquí no hay usuario autenticado)
@@ -171,7 +171,7 @@ async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
     return empresa;
   }
 
-  async update(id: string, dto: Partial<CreateEmpresaDto>, userRole: RolUsuario, userEmpresaId?: string) {
+  async update(id: string, dto: Partial<CreateClienteDto>, userRole: RolUsuario, userEmpresaId?: string) {
     // Primero, verificar acceso reutilizando findOne (que ya incluye validaciones de acceso y existencia)
     const empresa = await this.findOne(id, userRole, userEmpresaId);
 

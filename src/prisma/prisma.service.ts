@@ -5,22 +5,30 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
+    // Forzamos a Prisma a usar la URL del proceso actual
     super({
-      log:
-        process.env.NODE_ENV === 'development'
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
+      log: process.env.NODE_ENV === 'development'
           ? ['query', 'error', 'warn']
           : ['error'],
     });
   }
 
   async onModuleInit() {
-    await this.$connect();
-    console.log('✅ Database connected');
+    try {
+      console.log('⏳ Intentando conectar a la base de datos de Render...');
+      await this.$connect();
+      console.log('✅ Database connected');
+    } catch (error) {
+      console.error('❌ Error al conectar a la DB:', error.message);
+      // No lanzamos el throw para permitir que el servidor suba y ver Swagger
+    }
   }
 
   async onModuleDestroy() {

@@ -14,7 +14,7 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
-import { EmpresasService } from '../empresas/empresas.service';
+import { ClientesService } from '../clientes/clientes.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
 import { RegisterClienteDto } from './dto/register-cliente.dto';
 import { RegisterProveedorDto } from './dto/register-proveedor.dto';
@@ -27,7 +27,7 @@ export class AuthService {
       private prisma: PrismaService,
       private jwtService: JwtService,
       private config: ConfigService,
-      private empresasService: EmpresasService,
+      private clientesService: ClientesService,
       private proveedoresService: ProveedoresService,
     ) {}
 
@@ -153,14 +153,14 @@ export class AuthService {
     return this.prisma.$transaction(async (tx) => {
       // 1. Validaciones de unicidad (fuera o dentro de tx, pero mejor fuera para mejor mensaje)
       await this.checkEmailUnique(dto.email);
-      await this.empresasService.checkCuitUnique(dto.cuit); // asumiendo que agregaste este método
+      await this.clientesService.checkCuitUnique(dto.cuit); // asumiendo que agregaste este método
 
       if (!dto.contactoTelefono) {
         throw new BadRequestException('El teléfono de contacto de la empresa es obligatorio');
       }
 
       // 2. Crear empresa (transaccional)
-      const empresa = await this.empresasService.createInTransaction(tx, {
+      const empresa = await this.clientesService.createInTransaction(tx, {
         razonSocial: dto.razonSocial,
         cuit: dto.cuit,
         direccion: dto.direccion,
@@ -424,3 +424,4 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 }
+
