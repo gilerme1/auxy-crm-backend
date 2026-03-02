@@ -1,6 +1,35 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Controller, Get, Post, Body, Patch, Param, Delete, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiForbiddenResponse, ApiParam, ApiBody, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Patch, 
+  Param, 
+  Delete, 
+  UnauthorizedException, 
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { 
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiBearerAuth, 
+  ApiForbiddenResponse, 
+  ApiParam, 
+  ApiBody, 
+  ApiUnauthorizedResponse,
+  ApiConsumes,
+} from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Multer } from 'multer';
 import { UsuariosService } from './usuarios.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -123,10 +152,10 @@ export class UsuariosController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RolUsuario.SUPER_ADMIN)
+  @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.CLIENTE_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
   @ApiOperation({
-    summary: 'Soft-delete de un usuario (solo SUPER_ADMIN)',
-    description: 'Marca isActive = false y establece deletedAt',
+    summary: 'Soft-delete d’un usuario',
+    description: 'Marca isActive = false y establece deletedAt. SUPER_ADMIN puede todo. Otros solo su propia organización.',
   })
   @ApiParam({ name: 'id', description: 'ID del usuario a eliminar' })
   @ApiResponse({ status: 200, description: 'Usuario soft-deleted correctamente' })
@@ -134,12 +163,17 @@ export class UsuariosController {
   remove(
     @Param('id') id: string,
     @CurrentUser('rol') currentUserRole: RolUsuario,
+    @CurrentUser('empresaId') empresaId?: string,
+    @CurrentUser('proveedorId') proveedorId?: string,
   ) {
-    // Aunque ya está protegido por @Roles, pasamos el rol por consistencia
-    return this.usuariosService.softDelete(id, currentUserRole);
+    return this.usuariosService.softDelete(id, { 
+      rol: currentUserRole, 
+      empresaId, 
+      proveedorId 
+    });
   }
 
-  @Post('disponibilidad')
+  @Patch('disponibilidad')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RolUsuario.PROVEEDOR_OPERADOR)
   @ApiOperation({
@@ -165,5 +199,44 @@ export class UsuariosController {
     @Body() dto: { estado: EstadoDisponibilidad; ubicacion?: { lat: number; lng: number } },
   ) {
     return this.usuariosService.updateDisponibilidad(userId, dto);
+  }
+
+  @Post(':id/foto-perfil')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 3 * 1024 * 1024 }, // 3MB
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir foto de perfil' })
+  @ApiParam({ name: 'id', description: 'ID del usuario' })
+  @ApiResponse({ status: 200, description: 'Foto de perfil actualizada' })
+  uploadFotoPerfil(
+    @Param('id') userId: string,
+    @UploadedFile() file: Multer.File,
+    @CurrentUser('sub') currentUserId: string,
+  ) {
+    // Validar que el usuario solo pueda actualizar su propia foto
+    if (userId !== currentUserId) {
+      throw new UnauthorizedException('Solo puedes actualizar tu propia foto de perfil');
+    }
+    return this.usuariosService.uploadFotoPerfil(userId, file);
+  }
+
+  @Delete(':id/foto-perfil')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar foto de perfil' })
+  @ApiParam({ name: 'id', description: 'ID del usuario' })
+  @ApiResponse({ status: 204, description: 'Foto de perfil eliminada' })
+  deleteFotoPerfil(
+    @Param('id') userId: string,
+    @CurrentUser('sub') currentUserId: string,
+  ) {
+    // Validar que el usuario solo pueda eliminar su propia foto
+    if (userId !== currentUserId) {
+      throw new UnauthorizedException('Solo puedes eliminar tu propia foto de perfil');
+    }
+    return this.usuariosService.deleteFotoPerfil(userId);
   }
 }

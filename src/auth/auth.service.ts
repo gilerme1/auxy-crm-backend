@@ -14,9 +14,9 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
-import { ClientesService } from '../clientes/clientes.service';
+import { EmpresasService } from '../empresas/empresas.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
-import { RegisterClienteDto } from './dto/register-cliente.dto';
+import { RegisterEmpresaDto } from './dto/register-empresa.dto';
 import { RegisterProveedorDto } from './dto/register-proveedor.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma, RolUsuario } from '@prisma/client';
@@ -27,7 +27,7 @@ export class AuthService {
       private prisma: PrismaService,
       private jwtService: JwtService,
       private config: ConfigService,
-      private clientesService: ClientesService,
+      private empresasService: EmpresasService,
       private proveedoresService: ProveedoresService,
     ) {}
 
@@ -41,13 +41,13 @@ export class AuthService {
       throw new ConflictException('El email ya está registrado');
     }
 
-    const clienteRoles = ['CLIENTE_ADMIN', 'CLIENTE_OPERADOR'];
+    const empresaRoles = ['CLIENTE_ADMIN', 'CLIENTE_OPERADOR'];
     const proveedorRoles = ['PROVEEDOR_ADMIN', 'PROVEEDOR_OPERADOR'];
 
   // ───────────────────────────────────────────────
-  // Validaciones para roles de CLIENTE
+  // Validaciones para roles de EMPRESA
   // ───────────────────────────────────────────────
-  if (clienteRoles.includes(dto.rol)) {
+  if (empresaRoles.includes(dto.rol)) {
     if (!dto.empresaId) {
       throw new BadRequestException(
         'Usuarios con rol CLIENTE_ADMIN o CLIENTE_OPERADOR deben proporcionar un empresaId válido',
@@ -67,7 +67,7 @@ export class AuthService {
       throw new BadRequestException('La empresa seleccionada está inactiva');
     }
 
-    // Prohibir que un cliente tenga proveedorId
+    // Prohibir que un usuario de empresa tenga proveedorId
     if (dto.proveedorId) {
       throw new BadRequestException(
         'Los usuarios con rol CLIENTE_ADMIN o CLIENTE_OPERADOR no pueden tener proveedorId. ' +
@@ -147,20 +147,20 @@ export class AuthService {
   }
 
   // ───────────────────────────────────────────────
-  // Registro self-service CLIENTE
+  // Registro self-service EMPRESA
   // ───────────────────────────────────────────────
-  async registerCliente(dto: RegisterClienteDto) {
+  async registerEmpresa(dto: RegisterEmpresaDto) {
     return this.prisma.$transaction(async (tx) => {
       // 1. Validaciones de unicidad (fuera o dentro de tx, pero mejor fuera para mejor mensaje)
       await this.checkEmailUnique(dto.email);
-      await this.clientesService.checkCuitUnique(dto.cuit); // asumiendo que agregaste este método
+      await this.empresasService.checkCuitUnique(dto.cuit); // asumiendo que agregaste este método
 
       if (!dto.contactoTelefono) {
         throw new BadRequestException('El teléfono de contacto de la empresa es obligatorio');
       }
 
       // 2. Crear empresa (transaccional)
-      const empresa = await this.clientesService.createInTransaction(tx, {
+      const empresa = await this.empresasService.createInTransaction(tx, {
         razonSocial: dto.razonSocial,
         cuit: dto.cuit,
         direccion: dto.direccion,
@@ -410,7 +410,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // Usa tx si existe, sino el cliente global
+    // Usa tx si existe, sino el cliente Prisma global
     const prismaClient = tx || this.prisma;
 
     await prismaClient.refreshToken.create({
@@ -423,5 +423,83 @@ export class AuthService {
 
     return { accessToken, refreshToken };
   }
+
+  /**
+   * Validar o crear usuario desde Google OAuth
+   * Si existe el usuario por email, actualiza el registro
+   * Si no existe, crea uno nuevo con rol CLIENTE_OPERADOR por defecto
+   */
+  async validateOrCreateGoogleUser(googleProfile: any) {
+    const { email, nombre, apellido, fotoPerfil } = googleProfile;
+
+    // Buscar usuario existente por email
+    let user = await this.prisma.usuario.findUnique({
+      where: { email },
+    });
+
+    if (user) {
+      // Actualizar fotoPerfil si viene del OAuth
+      if (fotoPerfil && !user.fotoPerfil) {
+        user = await this.prisma.usuario.update({
+          where: { email },
+          data: { fotoPerfil },
+        });
+      }
+
+      if (!user?.isActive) {
+        throw new UnauthorizedException('Usuario inactivo o no encontrado');
+      }
+
+      // Generar tokens
+      const tokens = await this.generateTokens(user);
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          nombre: user.nombre,
+          apellido: user.apellido,
+          rol: user.rol,
+          empresaId: user.empresaId,
+          proveedorId: user.proveedorId,
+        },
+        ...tokens,
+        isNewUser: false,
+      };
+    }
+
+    // Crear nuevo usuario con rol CLIENTE_OPERADOR por defecto
+    const newUser = await this.prisma.usuario.create({
+      data: {
+        email,
+        nombre,
+        apellido,
+        fotoPerfil,
+        password: '', // Sin contraseña en OAuth
+        rol: RolUsuario.CLIENTE_OPERADOR,
+        isActive: true,
+      },
+    });
+
+    // Generar tokens para el nuevo usuario
+    const tokens = await this.generateTokens(newUser);
+
+    return {
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        nombre: newUser.nombre,
+        apellido: newUser.apellido,
+        rol: newUser.rol,
+        empresaId: newUser.empresaId,
+        proveedorId: newUser.proveedorId,
+      },
+      ...tokens,
+      isNewUser: true,
+      message: 'Usuario creado exitosamente. Por favor completa tu perfil.',
+    };
+  }
 }
+
+
+
 

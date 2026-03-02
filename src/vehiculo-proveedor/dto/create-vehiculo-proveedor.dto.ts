@@ -1,4 +1,4 @@
-import { IsString, IsInt, Min, Max, IsEnum, IsUUID, IsOptional } from 'class-validator';
+import { IsString, IsInt, Min, Max, IsEnum, IsUUID, IsOptional, IsArray, ArrayNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { TipoVehiculoProveedor, EstadoVehiculo } from '@prisma/client';
 
@@ -21,9 +21,11 @@ export class CreateVehiculoProveedorDto {
     @Max(2035)
     año: number;
 
-    @ApiProperty({ enum: TipoVehiculoProveedor, example: TipoVehiculoProveedor.GRUA_PESADA })
-    @IsEnum(TipoVehiculoProveedor)
-    tipo: TipoVehiculoProveedor;
+    @ApiProperty({ enum: TipoVehiculoProveedor, isArray: true, example: [TipoVehiculoProveedor.GRUA_PESADA_CAMIONES] })
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsEnum(TipoVehiculoProveedor, { each: true })
+    tipos: TipoVehiculoProveedor[];
 
     @ApiProperty({ example: 12000, description: 'Capacidad en kg (opcional)', required: false })
     @IsOptional()

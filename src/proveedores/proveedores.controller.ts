@@ -51,11 +51,16 @@ export class ProveedoresController {
     }
 
     @Patch(':id')
-    @Roles(RolUsuario.SUPER_ADMIN)
+    @Roles(RolUsuario.SUPER_ADMIN, RolUsuario.PROVEEDOR_ADMIN)
     @ApiOperation({ summary: 'Actualizar proveedor' })
     @ApiResponse({ status: 200, description: 'Proveedor actualizado' })
-    update(@Param('id') id: string, @Body() dto: UpdateProveedorDto) {
-      return this.proveedoresService.update(id, dto);
+    update(
+      @Param('id') id: string, 
+      @Body() dto: UpdateProveedorDto,
+      @CurrentUser('rol') userRole: RolUsuario,
+      @CurrentUser('proveedorId') proveedorId?: string,
+    ) {
+      return this.proveedoresService.update(id, dto, userRole, proveedorId);
     }
 
     @Delete(':id')

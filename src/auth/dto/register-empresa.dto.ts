@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// src/auth/dto/register-cliente.dto.ts
+// src/auth/dto/register-empresa.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
-export class RegisterClienteDto {
+export class RegisterEmpresaDto {
     @ApiProperty({ example: 'gerente@miempresa.com' })
     @IsEmail()
     @IsNotEmpty()

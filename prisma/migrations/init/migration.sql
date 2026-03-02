@@ -1,5 +1,8 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
-CREATE TYPE "RolUsuario" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'PROVIDER', 'OPERATOR');
+CREATE TYPE "RolUsuario" AS ENUM ('SUPER_ADMIN', 'CLIENTE_ADMIN', 'CLIENTE_OPERADOR', 'PROVEEDOR_ADMIN', 'PROVEEDOR_OPERADOR');
 
 -- CreateEnum
 CREATE TYPE "TipoVehiculo" AS ENUM ('AUTO', 'CAMIONETA', 'CAMION', 'MOTO', 'OTRO');
@@ -16,6 +19,12 @@ CREATE TYPE "EstadoSolicitud" AS ENUM ('PENDIENTE', 'ASIGNADO', 'EN_CAMINO', 'EN
 -- CreateEnum
 CREATE TYPE "Prioridad" AS ENUM ('BAJA', 'MEDIA', 'ALTA', 'URGENTE');
 
+-- CreateEnum
+CREATE TYPE "TipoVehiculoProveedor" AS ENUM ('GRUA_PESADA_CAMIONES', 'REMOLQUE', 'MECANICA', 'CERRAJERIA', 'GOMERIA_NEUMATICOS', 'OTRO');
+
+-- CreateEnum
+CREATE TYPE "EstadoDisponibilidad" AS ENUM ('DISPONIBLE', 'OCUPADO', 'EN_PAUSA', 'FUERA_DE_ZONA', 'DESCONECTADO');
+
 -- CreateTable
 CREATE TABLE "usuarios" (
     "id" TEXT NOT NULL,
@@ -24,13 +33,17 @@ CREATE TABLE "usuarios" (
     "nombre" TEXT NOT NULL,
     "apellido" TEXT NOT NULL,
     "telefono" TEXT,
-    "rol" "RolUsuario" NOT NULL DEFAULT 'OPERATOR',
+    "fotoPerfil" TEXT,
+    "rol" "RolUsuario" NOT NULL DEFAULT 'CLIENTE_OPERADOR',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "deletedAt" TIMESTAMP(3),
     "empresaId" TEXT,
     "proveedorId" TEXT,
+    "vehiculoProveedorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "estadoDisponibilidad" "EstadoDisponibilidad" DEFAULT 'DESCONECTADO',
+    "ultimaUbicacion" JSONB,
 
     CONSTRAINT "usuarios_pkey" PRIMARY KEY ("id")
 );
@@ -116,6 +129,25 @@ CREATE TABLE "proveedores" (
 );
 
 -- CreateTable
+CREATE TABLE "vehiculos_proveedor" (
+    "id" TEXT NOT NULL,
+    "patente" TEXT NOT NULL,
+    "marca" TEXT NOT NULL,
+    "modelo" TEXT NOT NULL,
+    "año" INTEGER NOT NULL,
+    "tipos" "TipoVehiculoProveedor"[],
+    "capacidadKg" INTEGER,
+    "estado" "EstadoVehiculo" NOT NULL DEFAULT 'ACTIVO',
+    "proveedorId" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "vehiculos_proveedor_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "solicitudes_auxilio" (
     "id" TEXT NOT NULL,
     "numero" TEXT NOT NULL,
@@ -142,10 +174,11 @@ CREATE TABLE "solicitudes_auxilio" (
     "empresaId" TEXT NOT NULL,
     "vehiculoId" TEXT NOT NULL,
     "proveedorId" TEXT,
-    "solicitadoPorId" TEXT NOT NULL,
+    "solicitadoPorId" TEXT,
     "atendidoPorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "vehiculoProveedorId" TEXT,
 
     CONSTRAINT "solicitudes_auxilio_pkey" PRIMARY KEY ("id")
 );
@@ -161,6 +194,12 @@ CREATE INDEX "usuarios_empresaId_idx" ON "usuarios"("empresaId");
 
 -- CreateIndex
 CREATE INDEX "usuarios_proveedorId_idx" ON "usuarios"("proveedorId");
+
+-- CreateIndex
+CREATE INDEX "usuarios_vehiculoProveedorId_idx" ON "usuarios"("vehiculoProveedorId");
+
+-- CreateIndex
+CREATE INDEX "usuarios_estadoDisponibilidad_idx" ON "usuarios"("estadoDisponibilidad");
 
 -- CreateIndex
 CREATE INDEX "usuarios_isActive_idx" ON "usuarios"("isActive");
@@ -223,6 +262,24 @@ CREATE INDEX "proveedores_isActive_idx" ON "proveedores"("isActive");
 CREATE INDEX "proveedores_deletedAt_idx" ON "proveedores"("deletedAt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "vehiculos_proveedor_patente_key" ON "vehiculos_proveedor"("patente");
+
+-- CreateIndex
+CREATE INDEX "vehiculos_proveedor_patente_idx" ON "vehiculos_proveedor"("patente");
+
+-- CreateIndex
+CREATE INDEX "vehiculos_proveedor_proveedorId_idx" ON "vehiculos_proveedor"("proveedorId");
+
+-- CreateIndex
+CREATE INDEX "vehiculos_proveedor_estado_idx" ON "vehiculos_proveedor"("estado");
+
+-- CreateIndex
+CREATE INDEX "vehiculos_proveedor_isActive_idx" ON "vehiculos_proveedor"("isActive");
+
+-- CreateIndex
+CREATE INDEX "vehiculos_proveedor_deletedAt_idx" ON "vehiculos_proveedor"("deletedAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "solicitudes_auxilio_numero_key" ON "solicitudes_auxilio"("numero");
 
 -- CreateIndex
@@ -256,6 +313,9 @@ ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_empresaId_fkey" FOREIGN KEY ("em
 ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_proveedorId_fkey" FOREIGN KEY ("proveedorId") REFERENCES "proveedores"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "usuarios" ADD CONSTRAINT "usuarios_vehiculoProveedorId_fkey" FOREIGN KEY ("vehiculoProveedorId") REFERENCES "vehiculos_proveedor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -265,16 +325,23 @@ ALTER TABLE "empresas" ADD CONSTRAINT "empresas_planId_fkey" FOREIGN KEY ("planI
 ALTER TABLE "vehiculos" ADD CONSTRAINT "vehiculos_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "empresas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "empresas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "vehiculos_proveedor" ADD CONSTRAINT "vehiculos_proveedor_proveedorId_fkey" FOREIGN KEY ("proveedorId") REFERENCES "proveedores"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_vehiculoId_fkey" FOREIGN KEY ("vehiculoId") REFERENCES "vehiculos"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_atendidoPorId_fkey" FOREIGN KEY ("atendidoPorId") REFERENCES "usuarios"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "empresas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_proveedorId_fkey" FOREIGN KEY ("proveedorId") REFERENCES "proveedores"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_solicitadoPorId_fkey" FOREIGN KEY ("solicitadoPorId") REFERENCES "usuarios"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_solicitadoPorId_fkey" FOREIGN KEY ("solicitadoPorId") REFERENCES "usuarios"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_atendidoPorId_fkey" FOREIGN KEY ("atendidoPorId") REFERENCES "usuarios"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_vehiculoId_fkey" FOREIGN KEY ("vehiculoId") REFERENCES "vehiculos"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "solicitudes_auxilio" ADD CONSTRAINT "solicitudes_auxilio_vehiculoProveedorId_fkey" FOREIGN KEY ("vehiculoProveedorId") REFERENCES "vehiculos_proveedor"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+

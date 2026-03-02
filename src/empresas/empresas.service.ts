@@ -6,14 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateClienteDto } from './dto/create-cliente.dto';
+import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { Prisma, RolUsuario } from '@prisma/client';
 
 @Injectable()
-export class ClientesService {
+export class EmpresasService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateClienteDto, userRole: RolUsuario) {
+  async create(dto: CreateEmpresaDto, userRole: RolUsuario) {
     // Validación adicional: Solo SUPER_ADMIN puede crear empresas
     if (userRole !== RolUsuario.SUPER_ADMIN) {
       throw new ForbiddenException('Solo super administradores pueden crear empresas');
@@ -55,7 +55,7 @@ export class ClientesService {
 
   async createInTransaction(
     tx: Prisma.TransactionClient,
-    dto: CreateClienteDto,
+    dto: CreateEmpresaDto,
   ) {
     // Reutilizamos las mismas validaciones que en create normal
     // (excepto el chequeo de rol, porque aquí no hay usuario autenticado)
@@ -171,7 +171,7 @@ async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
     return empresa;
   }
 
-  async update(id: string, dto: Partial<CreateClienteDto>, userRole: RolUsuario, userEmpresaId?: string) {
+  async update(id: string, dto: Partial<CreateEmpresaDto>, userRole: RolUsuario, userEmpresaId?: string) {
     // Primero, verificar acceso reutilizando findOne (que ya incluye validaciones de acceso y existencia)
     const empresa = await this.findOne(id, userRole, userEmpresaId);
 
@@ -229,7 +229,7 @@ async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
     });
   }
 
-  async getVehiculos(id: string, userRole: RolUsuario, userEmpresaId?: string) {
+  async getVehiculosEmpresa(id: string, userRole: RolUsuario, userEmpresaId?: string) {
     // Verificar acceso reutilizando findOne
     await this.findOne(id, userRole, userEmpresaId);
 
@@ -269,3 +269,4 @@ async findOne(id: string, userRole: RolUsuario, userEmpresaId?: string) {
   }
 
 }
+

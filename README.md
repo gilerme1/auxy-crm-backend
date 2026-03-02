@@ -15,6 +15,7 @@ API REST desarrollada con NestJS, Prisma y PostgreSQL para gestión de asistenci
 - Node.js 18+
 - PostgreSQL 14+
 - npm 
+- Cloudinary (para almacenamiento de archivos)
 
 ### Instalación
 
@@ -47,13 +48,14 @@ src/
 ├── auth/           # Autenticación y autorización
 ├── common/         # Decoradores, guards, filtros compartidos
 ├── config/         # Configuración de la aplicación
-├── clientes/       # Gestion de clientes
+├── clientes/       # Gestión de clientes
 ├── prisma/         # Cliente Prisma
 ├── proveedores/    # Gestión de proveedores
 ├── solicitudes/    # Gestión de solicitudes de auxilio (core)
-├── usuarios/       # Gestión de usuarios
+├── usuarios/       # Gestión de usuarios con fotos de perfil
 ├── vehiculos/      # Gestión de vehículos
-└── planes/         # Gestión de planes
+├── planes/         # Gestión de planes
+└── files/          # Servicio de gestión de archivos (Cloudinary)
 ```
 
 ## 🔐 Autenticación
@@ -91,11 +93,94 @@ Incluir en headers: `Authorization: Bearer {accessToken}`
 ## 👥 Roles y Permisos
 
 - **SUPER_ADMIN**: Acceso total al sistema
-- **ADMIN**: Gestión de su empresa, vehículos y solicitudes
-- **OPERATOR**: Crear solicitudes, ver vehículos de su empresa
-- **PROVIDER**: Ver y atender solicitudes asignadas
+- **CLIENTE_ADMIN**: Gestión de su empresa, vehículos y solicitudes
+- **CLIENTE_OPERADOR**: Crear solicitudes, ver vehículos de su empresa
+- **PROVEEDOR_ADMIN**: Gestión de su proveedor y operadores
+- **PROVEEDOR_OPERADOR**: Crear solicitudes, ver vehículos de su proveedor
 
 ## 📊 Endpoints Principales
+
+### Usuarios
+
+```bash
+# Crear usuario
+POST /api/v1/usuarios
+{
+  "email": "user@example.com",
+  "password": "securePassword123",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "telefono": "+598 99 123 456",
+  "rol": "CLIENTE_ADMIN",
+  "empresaId": "uuid" (opcional)
+}
+
+# Listar usuarios (paginado)
+GET /api/v1/usuarios?page=1&limit=10
+
+# Obtener usuario
+GET /api/v1/usuarios/{id}
+
+# Actualizar usuario
+PATCH /api/v1/usuarios/{id}
+{
+  "nombre": "Juan Carlos",
+  "telefono": "+598 99 987 654"
+}
+
+# Cambiar contraseña
+POST /api/v1/usuarios/{id}/change-password
+{
+  "oldPassword": "oldPass123",
+  "newPassword": "newPass456"
+}
+
+# Desactivar/Activar usuario
+PATCH /api/v1/usuarios/{id}/toggle-active
+
+# Soft delete (Solo SUPER_ADMIN)
+DELETE /api/v1/usuarios/{id}
+```
+
+### Fotos de Perfil
+
+```bash
+# Subir foto de perfil (máx 3MB, formatos: jpg, jpeg, png, webp)
+POST /api/v1/usuarios/{id}/foto-perfil
+Content-Type: multipart/form-data
+{
+  "file": <imagen>
+}
+
+Respuesta:
+{
+  "id": "uuid",
+  "email": "user@example.com",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "fotoPerfil": "https://res.cloudinary.com/...",
+  "rol": "CLIENTE_ADMIN"
+}
+
+# Eliminar foto de perfil
+DELETE /api/v1/usuarios/{id}/foto-perfil
+```
+
+### Estado de Disponibilidad (Operadores)
+
+```bash
+# Actualizar disponibilidad de operador
+PATCH /api/v1/usuarios/{id}/disponibilidad
+{
+  "estado": "DISPONIBLE",
+  "ubicacion": {
+    "lat": -34.9011,
+    "lng": -56.1645
+  }
+}
+
+# Estados válidos: DISPONIBLE, NO_DISPONIBLE, EN_SERVICIO
+```
 
 ### Solicitudes de Auxilio
 
@@ -184,6 +269,28 @@ POST /api/v1/vehiculos
 GET /api/v1/vehiculos/{id}/historial
 ```
 
+## 🔧 Servicio de Archivos
+
+El sistema integra **Cloudinary** para almacenamiento de archivos y fotos de perfil.
+
+### Configuración
+
+Asegurar que las siguientes variables de entorno estén configuradas:
+
+```bash
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+```
+
+### Características
+
+- Subida automática a carpetas organizadas por usuario
+- Validación de extensiones de archivo (jpg, jpeg, png, webp)
+- Límite de tamaño configurable por tipo de archivo
+- Eliminación automática de archivos anteriores
+- Manejo de errores robusto
+
 ## 🧪 Testing
 
 ```bash
@@ -259,6 +366,9 @@ services:
       DATABASE_URL: postgresql://auxy:auxy123@postgres:5432/auxy_crm
       JWT_SECRET: your-secret-key
       JWT_REFRESH_SECRET: your-refresh-secret
+      CLOUDINARY_CLOUD_NAME: your-cloud-name
+      CLOUDINARY_API_KEY: your-api-key
+      CLOUDINARY_API_SECRET: your-api-secret
     depends_on:
       - postgres
 
@@ -277,6 +387,11 @@ JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRES_IN=30m
 JWT_REFRESH_SECRET=your-refresh-secret
 JWT_REFRESH_EXPIRES_IN=7d
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
 
 # Google OAuth (opcional)
 GOOGLE_CLIENT_ID=your-google-client-id
@@ -330,3 +445,15 @@ Para debugging con VSCode, crear `.vscode/launch.json`:
 }
 ```
 
+## 📋 Changelog Reciente
+
+### v1.1.0 - Gestión Avanzada de Usuarios
+
+- ✅ Endpoint de fotos de perfil (subida y eliminación)
+- ✅ Control de disponibilidad de operadores con ubicación GPS
+- ✅ Soft delete de usuarios
+- ✅ Toggle de estado activo/inactivo
+- ✅ Cambio de contraseña con validación
+- ✅ Integración con Cloudinary para almacenamiento
+- ✅ Validaciones mejoradas en DTOs
+- ✅ Manejo de errores consistente

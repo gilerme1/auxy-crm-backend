@@ -138,8 +138,11 @@ export class ProveedoresService {
     return proveedor;
   }
 
-  async update(id: string, dto: UpdateProveedorDto) {
-    // SUPER_ADMIN se pasa aquí para que findOne no bloquee la búsqueda inicial
+  async update(id: string, dto: UpdateProveedorDto, userRole?: RolUsuario, userProveedorId?: string) {
+    if (userRole && userRole !== RolUsuario.SUPER_ADMIN && id !== userProveedorId) {
+      throw new ForbiddenException('No tienes permiso para actualizar este proveedor');
+    }
+
     const proveedor = await this.findOne(id, RolUsuario.SUPER_ADMIN);
 
     // if (dto.cuit) {

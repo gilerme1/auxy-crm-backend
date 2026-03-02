@@ -16,10 +16,13 @@ async function bootstrap() {
 
     // CORS
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+      origin: [
+        process.env.CORS_ORIGIN || 'http://localhost:3000',
+        'http://127.0.0.1:3000',
+      ],
       credentials: true,
     });
-
+    
     // Global prefix
     app.setGlobalPrefix('api');
 
@@ -43,7 +46,7 @@ async function bootstrap() {
       .addBearerAuth()
       .addTag('Auth', 'Endpoints de autenticación')
       .addTag('Usuarios', 'Gestión de usuarios')
-      .addTag('Clientes', 'Gestion de clientes')
+      .addTag('Empresas', 'Gestion de empresas')
       .addTag('Vehículos', 'Gestión de vehículos')
       .addTag('Proveedores', 'Gestión de proveedores')
       .addTag('Solicitudes', 'Gestión de solicitudes de auxilio')
@@ -62,4 +65,11 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+
+
+
+
+
+
 

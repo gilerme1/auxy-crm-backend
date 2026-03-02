@@ -7,26 +7,23 @@ import { PrismaClient } from '@prisma/client';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    // Forzamos a Prisma a usar la URL del proceso actual
     super({
       datasources: {
         db: {
           url: process.env.DATABASE_URL,
         },
       },
-      log: process.env.NODE_ENV === 'development'
-          ? ['query', 'error', 'warn']
-          : ['error'],
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
   }
 
   async onModuleInit() {
     try {
-      console.log('⏳ Intentando conectar a la base de datos de Render...');
+      console.log('? Intentando conectar a la base de datos de Render...');
       await this.$connect();
-      console.log('✅ Database connected');
+      console.log('? Database connected');
     } catch (error) {
-      console.error('❌ Error al conectar a la DB:', error.message);
+      console.error('? Error al conectar a la DB:', error.message);
       // No lanzamos el throw para permitir que el servidor suba y ver Swagger
     }
   }
@@ -35,11 +32,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$disconnect();
   }
 
-  // Helper para soft delete
+  // Helper para soft delete compatible con el schema actual
   softDelete(model: any, id: string) {
     return model.update({
       where: { id },
-      data: { activo: false },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+      },
     });
   }
 

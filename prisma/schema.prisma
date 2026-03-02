@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://auxydb_user:FVDXjCQjnOg616DIfW8aY819XNV6wiNU@dpg-d67i7vggjchc73an7v6g-a.oregon-postgres.render.com/auxydb?sslmode=require"
+  url      = env("DATABASE_URL")
 }
 
 model Usuario {
@@ -14,11 +14,14 @@ model Usuario {
   nombre               String
   apellido             String
   telefono             String?
+  fotoPerfil           String? // URL de Cloudinary
   rol                  RolUsuario            @default(CLIENTE_OPERADOR)
   isActive             Boolean               @default(true)
   deletedAt            DateTime?
   empresaId            String?
   proveedorId          String?
+  vehiculoProveedorId  String?
+  vehiculoProveedor    VehiculoProveedor?    @relation(fields: [vehiculoProveedorId], references: [id], onDelete: SetNull)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   estadoDisponibilidad EstadoDisponibilidad? @default(DESCONECTADO)
@@ -32,7 +35,7 @@ model Usuario {
   @@index([email])
   @@index([empresaId])
   @@index([proveedorId])
-  @@index([rol])
+  @@index([vehiculoProveedorId])
   @@index([estadoDisponibilidad])
   @@index([isActive])
   @@index([deletedAt])
@@ -140,25 +143,26 @@ model Proveedor {
 }
 
 model VehiculoProveedor {
-  id          String                @id @default(uuid())
-  patente     String                @unique
+  id          String                  @id @default(uuid())
+  patente     String                  @unique
   marca       String
   modelo      String
   año        Int
-  tipo        TipoVehiculoProveedor
+  tipos       TipoVehiculoProveedor[]
+  operadores  Usuario[]               
   capacidadKg Int?
-  estado      EstadoVehiculo        @default(ACTIVO)
+  estado      EstadoVehiculo          @default(ACTIVO)
   proveedorId String
-  isActive    Boolean               @default(true)
+  isActive    Boolean                 @default(true)
   deletedAt   DateTime?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  solicitudes SolicitudAuxilio[]    @relation("SolicitudVehiculoProveedor")
-  proveedor   Proveedor             @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  solicitudes SolicitudAuxilio[]      @relation("SolicitudVehiculoProveedor")
+  proveedor   Proveedor               @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
+  
 
   @@index([patente])
   @@index([proveedorId])
-  @@index([tipo])
   @@index([estado])
   @@index([isActive])
   @@index([deletedAt])
@@ -191,17 +195,17 @@ model SolicitudAuxilio {
   empresaId           String
   vehiculoId          String
   proveedorId         String?
-  solicitadoPorId     String
+  solicitadoPorId     String?
   atendidoPorId       String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   vehiculoProveedorId String?
-  atendidoPor         Usuario?           @relation("SolicitudAtendedor", fields: [atendidoPorId], references: [id])
+  atendidoPor         Usuario?           @relation("SolicitudAtendedor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
   empresa             Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id])
-  solicitadoPor       Usuario            @relation("SolicitudCreador", fields: [solicitadoPorId], references: [id])
-  vehiculo            Vehiculo           @relation(fields: [vehiculoId], references: [id])
-  vehiculoProveedor   VehiculoProveedor? @relation("SolicitudVehiculoProveedor", fields: [vehiculoProveedorId], references: [id])
+  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  solicitadoPor       Usuario?           @relation("SolicitudCreador", fields: [solicitadoPorId], references: [id], onDelete: SetNull)
+  vehiculo            Vehiculo           @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  vehiculoProveedor   VehiculoProveedor? @relation("SolicitudVehiculoProveedor", fields: [vehiculoProveedorId], references: [id], onDelete: SetNull)
 
   @@index([numero])
   @@index([estado])
@@ -263,10 +267,11 @@ enum Prioridad {
 }
 
 enum TipoVehiculoProveedor {
-  GRUA
-  GRUA_PESADA
-  TECNICO
-  CERRAJERO
+  GRUA_PESADA_CAMIONES
+  REMOLQUE
+  MECANICA
+  CERRAJERIA
+  GOMERIA_NEUMATICOS
   OTRO
 }
 

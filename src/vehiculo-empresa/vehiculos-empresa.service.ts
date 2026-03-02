@@ -12,7 +12,7 @@ import { CreateVehiculoDto } from './dto/create-vehiculo.dto';
 import { RolUsuario, EstadoVehiculo } from '@prisma/client';
 
 @Injectable()
-export class VehiculosService {
+export class VehiculosEmpresaService {
     constructor(private prisma: PrismaService) {}
 
     async create(dto: CreateVehiculoDto, userRole: string, userEmpresaId?: string) {

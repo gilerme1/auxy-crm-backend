@@ -5,7 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { ClientesModule } from '../clientes/clientes.module';      
+import { GoogleStrategy } from './strategies/google.strategy';
+import { EmpresasModule } from '../empresas/empresas.module';      
 import { ProveedoresModule } from '../proveedores/proveedores.module';  
 
 @Module({
@@ -21,11 +22,12 @@ import { ProveedoresModule } from '../proveedores/proveedores.module';
       }),
       inject: [ConfigService],
     }),
-    ClientesModule, 
+    EmpresasModule, 
     ProveedoresModule, 
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, GoogleStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}
+

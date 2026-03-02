@@ -1,11 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { FilesService } from '../files/files.service';
 import { CreateSolicitudDto } from './dto/create-solicitud.dto';
 import { AsignarSolicitudDto } from './dto/asignar-solicitud.dto';
 import { FinalizarSolicitudDto } from './dto/finalizar-solicitud.dto';
@@ -21,19 +22,32 @@ import {
   EstadoVehiculo,
   TipoVehiculoProveedor,
   TipoVehiculo,
+  SolicitudAuxilio,
 } from '@prisma/client';
+import type { Multer } from 'multer';
 
 @Injectable()
 export class SolicitudesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(SolicitudesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private filesService: FilesService,
+  ) {}
 
   async create(dto: CreateSolicitudDto, userId: string) {
     // Validar coordenadas
     if (
-      typeof dto.latitud !== 'number' || dto.latitud < -90 || dto.latitud > 90 ||
-      typeof dto.longitud !== 'number' || dto.longitud < -180 || dto.longitud > 180
+      typeof dto.latitud !== 'number' ||
+      dto.latitud < -90 ||
+      dto.latitud > 90 ||
+      typeof dto.longitud !== 'number' ||
+      dto.longitud < -180 ||
+      dto.longitud > 180
     ) {
-      throw new BadRequestException('Coordenadas de ubicación inválidas. Latitud debe estar entre -90 y 90, longitud entre -180 y 180.');
+      throw new BadRequestException(
+        'Coordenadas de ubicación inválidas. Latitud debe estar entre -90 y 90, longitud entre -180 y 180.',
+      );
     }
     const vehiculo = await this.prisma.vehiculo.findUnique({
       where: { id: dto.vehiculoId },
@@ -52,7 +66,10 @@ export class SolicitudesService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    if (usuario.rol !== RolUsuario.SUPER_ADMIN && usuario.empresaId !== vehiculo.empresaId) {
+    if (
+      usuario.rol !== RolUsuario.SUPER_ADMIN &&
+      usuario.empresaId !== vehiculo.empresaId
+    ) {
       throw new ForbiddenException('No tienes acceso a este vehículo');
     }
 
@@ -84,7 +101,15 @@ export class SolicitudesService {
     userId: string,
     userRole: RolUsuario, // Cambiamos a tipo RolUsuario directamente
   ) {
-    const { page = 1, limit = 10, estado, tipo, empresaId, proveedorId, vehiculoId } = query;
+    const {
+      page = 1,
+      limit = 10,
+      estado,
+      tipo,
+      empresaId,
+      proveedorId,
+      vehiculoId,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.SolicitudAuxilioWhereInput = {};
@@ -100,9 +125,15 @@ export class SolicitudesService {
     if (!usuario) throw new ForbiddenException('Usuario no válido');
 
     // Filtros según rol - usamos comparación directa con enum
-    if (userRole === RolUsuario.CLIENTE_ADMIN || userRole === RolUsuario.CLIENTE_OPERADOR) {
+    if (
+      userRole === RolUsuario.CLIENTE_ADMIN ||
+      userRole === RolUsuario.CLIENTE_OPERADOR
+    ) {
       if (usuario.empresaId) where.empresaId = usuario.empresaId;
-    } else if (userRole === RolUsuario.PROVEEDOR_ADMIN || userRole === RolUsuario.PROVEEDOR_OPERADOR) {
+    } else if (
+      userRole === RolUsuario.PROVEEDOR_ADMIN ||
+      userRole === RolUsuario.PROVEEDOR_OPERADOR
+    ) {
       if (usuario.proveedorId) where.proveedorId = usuario.proveedorId;
     }
 
@@ -144,10 +175,22 @@ export class SolicitudesService {
         empresa: true,
         proveedor: true,
         solicitadoPor: {
-          select: { id: true, nombre: true, apellido: true, email: true, telefono: true },
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+            telefono: true,
+          },
         },
         atendidoPor: {
-          select: { id: true, nombre: true, apellido: true, email: true, telefono: true },
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+            telefono: true,
+          },
         },
       },
     });
@@ -157,21 +200,24 @@ export class SolicitudesService {
     }
 
     await this.checkAccess(solicitud, userId, userRole);
-    
+
     return solicitud;
   }
-  
+
   async asignar(id: string, dto: AsignarSolicitudDto, userId: string) {
     const solicitud = await this.findOne(id, userId, RolUsuario.SUPER_ADMIN);
     if (solicitud.estado !== EstadoSolicitud.PENDIENTE) {
-      throw new BadRequestException('Solo solicitudes pendientes pueden asignarse');
+      throw new BadRequestException(
+        'Solo solicitudes pendientes pueden asignarse',
+      );
     }
 
     const vehiculoCliente = await this.prisma.vehiculo.findUnique({
       where: { id: solicitud.vehiculoId },
     });
 
-    if (!vehiculoCliente) throw new NotFoundException('Vehículo cliente no encontrado');
+    if (!vehiculoCliente)
+      throw new NotFoundException('Vehículo cliente no encontrado');
 
     // 1. Validar proveedor
     const proveedor = await this.prisma.proveedor.findUnique({
@@ -187,19 +233,20 @@ export class SolicitudesService {
       id: string;
       proveedorId: string;
       isActive: boolean;
-      tipo: TipoVehiculoProveedor;
+      tipos: TipoVehiculoProveedor[];
     } | null = null;
 
     if (dto.vehiculoProveedorId) {
-      vehiculoProveedorSeleccionado = await this.prisma.vehiculoProveedor.findUnique({
-        where: { id: dto.vehiculoProveedorId },
-        select: {
-          id: true,
-          proveedorId: true,
-          isActive: true,
-          tipo: true,
-        },
-      });
+      vehiculoProveedorSeleccionado =
+        await this.prisma.vehiculoProveedor.findUnique({
+          where: { id: dto.vehiculoProveedorId },
+          select: {
+            id: true,
+            proveedorId: true,
+            isActive: true,
+            tipos: true,
+          },
+        });
 
       if (!vehiculoProveedorSeleccionado) {
         throw new NotFoundException('Vehículo de proveedor no encontrado');
@@ -216,9 +263,13 @@ export class SolicitudesService {
       // Validación de compatibilidad
       if (
         vehiculoCliente.tipo === TipoVehiculo.CAMION &&
-        vehiculoProveedorSeleccionado.tipo !== TipoVehiculoProveedor.GRUA_PESADA
+        !vehiculoProveedorSeleccionado.tipos.includes(
+          TipoVehiculoProveedor.GRUA_PESADA_CAMIONES,
+        )
       ) {
-        throw new BadRequestException('Camiones requieren GRUA_PESADA');
+        throw new BadRequestException(
+          'Camiones requieren GRUA_PESADA_CAMIONES',
+        );
       }
     }
 
@@ -229,22 +280,37 @@ export class SolicitudesService {
         estadoDisponibilidad: EstadoDisponibilidad.DISPONIBLE,
         proveedorId: dto.proveedorId,
       },
-      include: { proveedor: true },
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        email: true,
+        vehiculoProveedorId: true,
+        proveedor: true,
+      },
     });
 
     if (candidatos.length === 0) {
-      throw new NotFoundException('No hay operadores disponibles en este proveedor');
+      throw new NotFoundException(
+        'No hay operadores disponibles en este proveedor',
+      );
     }
 
     // 4. Elegir operador (primero por simplicidad)
     const operadorAsignado = candidatos[0];
 
-    // 5. Actualizar solicitud
+    // 5. Auto-asignar vehículo del operador si no se especifica manualmente
+    let vehiculoProveedorIdFinal = dto.vehiculoProveedorId;
+    if (!vehiculoProveedorIdFinal && operadorAsignado.vehiculoProveedorId) {
+      vehiculoProveedorIdFinal = operadorAsignado.vehiculoProveedorId;
+    }
+
+    // 6. Actualizar solicitud
     const updated = await this.prisma.solicitudAuxilio.update({
       where: { id },
       data: {
         proveedorId: dto.proveedorId,
-        vehiculoProveedorId: dto.vehiculoProveedorId ?? null, // Usa ?? para null explícito
+        vehiculoProveedorId: vehiculoProveedorIdFinal ?? null,
         atendidoPorId: operadorAsignado.id,
         estado: EstadoSolicitud.ASIGNADO,
         fechaAsignacion: new Date(),
@@ -275,7 +341,9 @@ export class SolicitudesService {
     const solicitud = await this.findOne(id, userId, userRole);
     this.validateStateTransition(solicitud.estado, dto.estado);
 
-    const updateData: Prisma.SolicitudAuxilioUpdateInput = { estado: dto.estado };
+    const updateData: Prisma.SolicitudAuxilioUpdateInput = {
+      estado: dto.estado,
+    };
 
     if (dto.estado === EstadoSolicitud.EN_CAMINO && !solicitud.fechaInicio) {
       updateData.fechaInicio = new Date();
@@ -296,7 +364,11 @@ export class SolicitudesService {
   }
 
   async getRecursosDisponibles(solicitudId: string, userId: string) {
-    const solicitud = await this.findOne(solicitudId, userId, RolUsuario.SUPER_ADMIN);
+    const solicitud = await this.findOne(
+      solicitudId,
+      userId,
+      RolUsuario.SUPER_ADMIN,
+    );
 
     // Buscar vehículos activos del proveedor asociado (o de todos si no hay proveedor aún)
     const recursos = await this.prisma.vehiculoProveedor.findMany({
@@ -310,13 +382,16 @@ export class SolicitudesService {
       include: {
         proveedor: { select: { id: true, razonSocial: true } },
       },
-      orderBy: { tipo: 'asc' },
+      orderBy: { marca: 'asc' },
     });
 
     // Filtrar por compatibilidad básica (opcional, puedes mejorar con distancia más adelante)
     const compatibles = recursos.filter((r) => {
-      if (solicitud.tipo === TipoAuxilio.GRUA && solicitud.vehiculo.tipo === TipoVehiculo.CAMION) {
-        return r.tipo === TipoVehiculoProveedor.GRUA_PESADA;
+      if (
+        solicitud.tipo === TipoAuxilio.GRUA &&
+        solicitud.vehiculo.tipo === TipoVehiculo.CAMION
+      ) {
+        return r.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES);
       }
       return true; // por defecto, todos los demás
     });
@@ -325,10 +400,16 @@ export class SolicitudesService {
   }
 
   async finalizar(id: string, dto: FinalizarSolicitudDto, userId: string) {
-    const solicitud = await this.findOne(id, userId, RolUsuario.PROVEEDOR_OPERADOR);
+    const solicitud = await this.findOne(
+      id,
+      userId,
+      RolUsuario.PROVEEDOR_OPERADOR,
+    );
 
     if (solicitud.estado !== EstadoSolicitud.EN_SERVICIO) {
-      throw new BadRequestException('Solo se pueden finalizar solicitudes en servicio');
+      throw new BadRequestException(
+        'Solo se pueden finalizar solicitudes en servicio',
+      );
     }
 
     return this.prisma.solicitudAuxilio.update({
@@ -346,7 +427,9 @@ export class SolicitudesService {
     const solicitud = await this.findOne(id, userId, RolUsuario.CLIENTE_ADMIN);
 
     if (solicitud.estado !== EstadoSolicitud.FINALIZADO) {
-      throw new BadRequestException('Solo se pueden calificar servicios finalizados');
+      throw new BadRequestException(
+        'Solo se pueden calificar servicios finalizados',
+      );
     }
 
     if (solicitud.calificacion) {
@@ -368,7 +451,12 @@ export class SolicitudesService {
     return updated;
   }
 
-  async cancelar(id: string, motivo: string, userId: string, userRole: RolUsuario) {
+  async cancelar(
+    id: string,
+    motivo: string,
+    userId: string,
+    userRole: RolUsuario,
+  ) {
     const solicitud = await this.findOne(id, userId, userRole);
 
     const estadosCancelables: EstadoSolicitud[] = [
@@ -390,7 +478,11 @@ export class SolicitudesService {
     });
   }
 
-  private async checkAccess(solicitud: any, userId: string, userRole: RolUsuario) {
+  private async checkAccess(
+    solicitud: SolicitudAuxilio,
+    userId: string,
+    userRole: RolUsuario,
+  ) {
     if (userRole === RolUsuario.SUPER_ADMIN) return;
 
     const usuario = await this.prisma.usuario.findUnique({
@@ -415,10 +507,19 @@ export class SolicitudesService {
     }
   }
 
-  private validateStateTransition(currentState: EstadoSolicitud, newState: EstadoSolicitud) {
+  private validateStateTransition(
+    currentState: EstadoSolicitud,
+    newState: EstadoSolicitud,
+  ) {
     const validTransitions: Record<EstadoSolicitud, EstadoSolicitud[]> = {
-      [EstadoSolicitud.PENDIENTE]: [EstadoSolicitud.ASIGNADO, EstadoSolicitud.CANCELADO],
-      [EstadoSolicitud.ASIGNADO]: [EstadoSolicitud.EN_CAMINO, EstadoSolicitud.CANCELADO],
+      [EstadoSolicitud.PENDIENTE]: [
+        EstadoSolicitud.ASIGNADO,
+        EstadoSolicitud.CANCELADO,
+      ],
+      [EstadoSolicitud.ASIGNADO]: [
+        EstadoSolicitud.EN_CAMINO,
+        EstadoSolicitud.CANCELADO,
+      ],
       [EstadoSolicitud.EN_CAMINO]: [EstadoSolicitud.EN_SERVICIO],
       [EstadoSolicitud.EN_SERVICIO]: [EstadoSolicitud.FINALIZADO],
       [EstadoSolicitud.FINALIZADO]: [],
@@ -426,7 +527,9 @@ export class SolicitudesService {
     };
 
     if (!validTransitions[currentState].includes(newState)) {
-      throw new BadRequestException(`No se puede cambiar de ${currentState} a ${newState}`);
+      throw new BadRequestException(
+        `No se puede cambiar de ${currentState} a ${newState}`,
+      );
     }
   }
 
@@ -437,11 +540,94 @@ export class SolicitudesService {
     });
 
     if (solicitudes.length > 0) {
-      const promedio = solicitudes.reduce((sum, s) => sum + (s.calificacion ?? 0), 0) / solicitudes.length;
+      const promedio =
+        solicitudes.reduce((sum, s) => sum + (s.calificacion ?? 0), 0) /
+        solicitudes.length;
       await this.prisma.proveedor.update({
         where: { id: proveedorId },
         data: { calificacionPromedio: promedio },
       });
+    }
+  }
+
+  /**
+   * Subir fotos a una solicitud existente
+   */
+  async uploadFotos(
+    solicitudId: string,
+    files: Multer.File[],
+    userId: string,
+    userRole: RolUsuario,
+  ) {
+    const solicitud = await this.findOne(solicitudId, userId, userRole);
+
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No se proporcionaron archivos');
+    }
+
+    try {
+      const results = await this.filesService.uploadMultiple(files, {
+        folder: `auxy/solicitudes/${solicitudId}`,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      });
+
+      const fotoUrls = results.map((r) => r.secure_url);
+
+      const fotosActuales = solicitud.fotos || [];
+      const fotosActualizadas = [...fotosActuales, ...fotoUrls];
+
+      return this.prisma.solicitudAuxilio.update({
+        where: { id: solicitudId },
+        data: { fotos: fotosActualizadas },
+        include: {
+          vehiculo: true,
+          empresa: true,
+          proveedor: true,
+          solicitadoPor: { select: { id: true, nombre: true, apellido: true } },
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error subiendo fotos a solicitud ${solicitudId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar una foto de una solicitud
+   */
+  async deleteFoto(
+    solicitudId: string,
+    fotoUrl: string,
+    userId: string,
+    userRole: RolUsuario,
+  ) {
+    const solicitud = await this.findOne(solicitudId, userId, userRole);
+
+    if (!solicitud.fotos || !solicitud.fotos.includes(fotoUrl)) {
+      throw new NotFoundException('Foto no encontrada en esta solicitud');
+    }
+
+    try {
+      const publicId = this.filesService.extractPublicId(fotoUrl);
+      if (publicId) {
+        await this.filesService.deleteFile(publicId, 'image');
+      }
+
+      const fotosActualizadas = solicitud.fotos.filter((f) => f !== fotoUrl);
+
+      return this.prisma.solicitudAuxilio.update({
+        where: { id: solicitudId },
+        data: { fotos: fotosActualizadas },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error eliminando foto de solicitud ${solicitudId}:`,
+        error,
+      );
+      throw error;
     }
   }
 }

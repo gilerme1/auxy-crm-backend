@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// src/auth/dto/register-cliente.dto.ts
+// src/auth/dto/register-proveedor.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMinSize, IsArray, IsEmail, IsNotEmpty, IsOptional, IsString, Length, Matches, MinLength } from 'class-validator';
 

@@ -1,7 +1,7 @@
 import { IsString, IsEmail, IsUUID, IsOptional, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CreateClienteDto {
+export class CreateEmpresaDto {
     @ApiProperty({ example: 'Transportes ABC S.A.' })
     @IsString()
     razonSocial: string;
@@ -28,3 +28,4 @@ export class CreateClienteDto {
     @IsUUID()
     planId?: string;
 }
+

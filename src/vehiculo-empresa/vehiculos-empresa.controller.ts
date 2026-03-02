@@ -20,7 +20,7 @@ import {
   ApiConflictResponse,
   ApiBadRequestResponse,
 } from '@nestjs/swagger';
-import { VehiculosService } from './vehiculos.service';
+import { VehiculosEmpresaService } from './vehiculos-empresa.service';
 import { CreateVehiculoDto } from './dto/create-vehiculo.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,12 +28,12 @@ import { RolUsuario } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
-@ApiTags('vehiculos')
+@ApiTags('vehiculos-empresa')
 @ApiBearerAuth()
-@Controller('vehiculos')
+@Controller('vehiculos-empresa')
 @UseGuards(JwtAuthGuard) // Todas las rutas requieren autenticación
 export class VehiculosController {
-  constructor(private readonly vehiculosService: VehiculosService) {}
+  constructor(private readonly vehiculosEmpresaService: VehiculosEmpresaService) {}
 
   @Post()
   @UseGuards(RolesGuard)
@@ -48,7 +48,7 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.vehiculosService.create(createVehiculoDto, userRole, userEmpresaId);
+    return this.vehiculosEmpresaService.create(createVehiculoDto, userRole, userEmpresaId);
   }
 
   @Get()
@@ -61,7 +61,7 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') empresaId?: string,
   ) {
-    return this.vehiculosService.findAll(userRole, empresaId);
+    return this.vehiculosEmpresaService.findAll(userRole, empresaId);
   }
 
   @Get(':id')
@@ -76,7 +76,7 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.vehiculosService.findOne(id, userRole, userEmpresaId);
+    return this.vehiculosEmpresaService.findOne(id, userRole, userEmpresaId);
   }
 
   @Patch(':id')
@@ -96,7 +96,7 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.vehiculosService.update(id, updateVehiculoDto, userRole, userEmpresaId);
+    return this.vehiculosEmpresaService.update(id, updateVehiculoDto, userRole, userEmpresaId);
   }
 
   @Delete(':id')
@@ -114,7 +114,7 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.vehiculosService.remove(id, userRole, userEmpresaId);
+    return this.vehiculosEmpresaService.remove(id, userRole, userEmpresaId);
   }
 
   @Get(':id/historial')
@@ -128,6 +128,6 @@ export class VehiculosController {
     @CurrentUser('rol') userRole: RolUsuario,
     @CurrentUser('empresaId') userEmpresaId?: string,
   ) {
-    return this.vehiculosService.getHistorial(id, userRole, userEmpresaId);
+    return this.vehiculosEmpresaService.getHistorial(id, userRole, userEmpresaId);
   }
 }

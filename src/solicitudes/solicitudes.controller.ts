@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   Controller,
@@ -9,13 +11,20 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFiles,
+  Delete,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { File } from 'multer';
 import { SolicitudesService } from './solicitudes.service';
 import { CreateSolicitudDto } from './dto/create-solicitud.dto';
 import { AsignarSolicitudDto } from './dto/asignar-solicitud.dto';
@@ -136,5 +145,37 @@ export class SolicitudesController {
     @CurrentUser('rol') userRole: RolUsuario, // ← Cambia a RolUsuario
   ) {
     return this.solicitudesService.cancelar(id, motivo, userId, userRole);
+  }
+
+  @Post(':id/fotos')
+  @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR, RolUsuario.PROVEEDOR_OPERADOR)
+  @UseInterceptors(
+    FilesInterceptor('files', 10, {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB por archivo
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir fotos a una solicitud' })
+  uploadFotos(
+    @Param('id') id: string,
+    @UploadedFiles() files: File[],
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('rol') userRole: RolUsuario,
+  ) {
+    return this.solicitudesService.uploadFotos(id, files, userId, userRole);
+  }
+
+  @Delete(':id/fotos')
+  @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR, RolUsuario.PROVEEDOR_OPERADOR)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar una foto de una solicitud' })
+  deleteFoto(
+    @Param('id') id: string,
+    @Body('fotoUrl') fotoUrl: string,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('rol') userRole: RolUsuario,
+  ) {
+    return this.solicitudesService.deleteFoto(id, fotoUrl, userId, userRole);
   }
 }

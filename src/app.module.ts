@@ -4,14 +4,15 @@ import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
-import { ClientesModule } from './clientes/clientes.module';
-import { VehiculosModule } from './vehiculos/vehiculos.module';
+import { EmpresasModule } from './empresas/empresas.module';
+import { VehiculosModule as VehiculosEmpresaModule } from './vehiculo-empresa/vehiculos-empresa.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { SolicitudesModule } from './solicitudes/solicitudes.module';
 import { PlanesModule } from './planes/planes.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveedor.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -21,9 +22,10 @@ import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveed
     }),
     PrismaModule,
     AuthModule,
+    FilesModule,
     UsuariosModule,
-    ClientesModule,
-    VehiculosModule,
+    EmpresasModule,
+    VehiculosEmpresaModule,
     ProveedoresModule,
     SolicitudesModule,
     VehiculosProveedorModule,
@@ -43,3 +45,4 @@ import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveed
   ],
 })
 export class AppModule {}
+

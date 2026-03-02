@@ -41,6 +41,7 @@ Inyección de Dependencias: Seguir el patrón nativo de NestJS; evitar el uso de
 Para mejorar la calidad de las sugerencias, referenciar los siguientes estándares:
 
 API Docs: Swagger (disponible en /api/docs en desarrollo).
+En los controladores de NestJS, incluye siempre decoradores de @nestjs/swagger (@ApiTags, @ApiOperation).
 
 Patrones: API Design Principles para mantener la consistencia en los recursos REST.
 
@@ -49,4 +50,4 @@ Prisma Docs: Prisma Best Practices.
 NestJS Docs: https://docs.nestjs.com/
 
 5. Instrucciones para la IA
-Cuando generes código para Auxy, prioriza la legibilidad y el tipado fuerte de TypeScript.
+Cuando generes código para Auxy, prioriza la legibilidad y el tipado fuerte de TypeScript, evita el uso de 'any'.
