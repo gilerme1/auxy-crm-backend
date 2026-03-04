@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { VehiculosProveedorModule } from './vehiculo-proveedor/vehiculos-proveedor.module';
 import { FilesModule } from './files/files.module';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { FilesModule } from './files/files.module';
     SolicitudesModule,
     VehiculosProveedorModule,
     PlanesModule,
+    StatsModule,
   ],
   providers: [
     // Guard global: todas las rutas requieren auth por defecto

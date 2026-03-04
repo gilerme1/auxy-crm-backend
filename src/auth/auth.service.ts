@@ -299,6 +299,7 @@ export class AuthService {
         rol: user.rol,
         empresaId: user.empresaId,
         proveedorId: user.proveedorId,
+        fotoPerfil: user.fotoPerfil,
       },
       ...tokens,
     };
@@ -366,6 +367,7 @@ export class AuthService {
         isActive: true,
         empresaId: true,
         proveedorId: true,
+        fotoPerfil: true,
         empresa: {
           select: {
             id: true,
@@ -461,6 +463,7 @@ export class AuthService {
           rol: user.rol,
           empresaId: user.empresaId,
           proveedorId: user.proveedorId,
+          fotoPerfil: user.fotoPerfil,
         },
         ...tokens,
         isNewUser: false,
@@ -492,6 +495,7 @@ export class AuthService {
         rol: newUser.rol,
         empresaId: newUser.empresaId,
         proveedorId: newUser.proveedorId,
+        fotoPerfil: newUser.fotoPerfil,
       },
       ...tokens,
       isNewUser: true,

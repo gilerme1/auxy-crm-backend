@@ -25,17 +25,19 @@ export class CreateSolicitudDto {
     @IsUUID()
     vehiculoId: string;
 
-    @ApiProperty({ example: -34.9011, description: 'Latitud' })
+    @ApiProperty({ example: -34.9011, description: 'Latitud', required: false })
+    @IsOptional()
     @IsNumber()
     @Min(-90)
     @Max(90)
-    latitud: number;
+    latitud?: number;
 
-    @ApiProperty({ example: -56.1645, description: 'Longitud' })
+    @ApiProperty({ example: -56.1645, description: 'Longitud', required: false })
+    @IsOptional()
     @IsNumber()
     @Min(-180)
     @Max(180)
-    longitud: number;
+    longitud?: number;
 
     @ApiProperty({ example: 'Av. 18 de Julio 1234, Montevideo' })
     @IsString()

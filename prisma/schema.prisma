@@ -149,17 +149,16 @@ model VehiculoProveedor {
   modelo      String
   año        Int
   tipos       TipoVehiculoProveedor[]
-  operadores  Usuario[]               
+  operadores  Usuario[]
   capacidadKg Int?
   estado      EstadoVehiculo          @default(ACTIVO)
   proveedorId String
   isActive    Boolean                 @default(true)
   deletedAt   DateTime?
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
   solicitudes SolicitudAuxilio[]      @relation("SolicitudVehiculoProveedor")
   proveedor   Proveedor               @relation(fields: [proveedorId], references: [id], onDelete: Cascade)
-  
 
   @@index([patente])
   @@index([proveedorId])

@@ -11,16 +11,20 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
     // Security
-    app.use(helmet());
-    // app.use(compression());
+    app.use(helmet({
+          contentSecurityPolicy: false, // Desactiva CSP temporalmente si Swagger no carga en Render
+        }));
 
     // CORS
     app.enableCors({
       origin: [
-        process.env.CORS_ORIGIN || 'http://localhost:3000',
+        'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'https://tu-app-auxy.vercel.app' // Pon la de Vercel cuando la tengas
       ],
-      credentials: true,
+      credentials: true, // ¡Obligatorio porque usas cookies/auth tokens!
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      allowedHeaders: 'Content-Type, Accept, Authorization',
     });
     
     // Global prefix
@@ -65,11 +69,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-
-
-
-
-
-
-
-

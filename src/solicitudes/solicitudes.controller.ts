@@ -32,6 +32,8 @@ import { FinalizarSolicitudDto } from './dto/finalizar-solicitud.dto';
 import { CalificarSolicitudDto } from './dto/calificar-solicitud.dto';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
 import { QuerySolicitudDto } from './dto/query-solicitud.dto';
+import { AceptarSolicitudDto } from './dto/aceptar-solicitud.dto';
+import { CancelarSolicitudDto } from './dto/cancelar-solicitud.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
@@ -98,6 +100,18 @@ export class SolicitudesController {
   }
 
 
+  @Post(':id/aceptar')
+  @Roles(RolUsuario.PROVEEDOR_ADMIN, RolUsuario.PROVEEDOR_OPERADOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Aceptar una solicitud pendiente (Modelo Marketplace)' })
+  aceptar(
+    @Param('id') id: string,
+    @Body() dto: AceptarSolicitudDto,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.solicitudesService.aceptarMarketplace(id, dto, userId);
+  }
+
   @Patch(':id/estado')
   @Roles(RolUsuario.PROVEEDOR_OPERADOR, RolUsuario.SUPER_ADMIN)
   @ApiOperation({ summary: 'Cambiar estado de solicitud' })
@@ -123,7 +137,7 @@ export class SolicitudesController {
   }
 
   @Post(':id/calificar')
-  @Roles(RolUsuario.CLIENTE_ADMIN)
+  @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Calificar servicio' })
   calificar(
@@ -140,11 +154,11 @@ export class SolicitudesController {
   @ApiOperation({ summary: 'Cancelar solicitud' })
   cancelar(
     @Param('id') id: string,
-    @Body('motivo') motivo: string,
+    @Body() dto: CancelarSolicitudDto,
     @CurrentUser('sub') userId: string,
-    @CurrentUser('rol') userRole: RolUsuario, // ← Cambia a RolUsuario
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
-    return this.solicitudesService.cancelar(id, motivo, userId, userRole);
+    return this.solicitudesService.cancelar(id, dto.motivo, userId, userRole);
   }
 
   @Post(':id/fotos')

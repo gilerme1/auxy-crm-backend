@@ -52,46 +52,38 @@ export class FilesService {
         options: CloudinaryUploadOptions = {},
     ): Promise<UploadApiResponse> {
         try {
-        // Validar archivo
-        this.validateFile(file, options);
+            // Validar archivo
+            this.validateFile(file, options);
 
-        const stream = require('stream');
-        const uploadStream = cloudinary.uploader.upload_stream(
-            {
-            folder: options.folder || 'auxy',
-            resource_type: options.resourceType || 'auto',
-            public_id: options.publicId,
-            ...(options.width && {
-                width: options.width,
-                height: options.height || options.width,
-                crop: options.crop || 'thumb',
-            }),
-            },
-            (error: UploadApiErrorResponse, result: UploadApiResponse) => {
-            if (error) {
-                this.logger.error('Error uploading to Cloudinary:', error);
-                throw new InternalServerErrorException(
-                'Error al subir archivo a Cloudinary',
+            return new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: options.folder || 'auxy',
+                        resource_type: options.resourceType || 'auto',
+                        public_id: options.publicId,
+                        ...(options.width && {
+                            width: options.width,
+                            height: options.height || options.width,
+                            crop: options.crop || 'thumb',
+                        }),
+                    },
+                    (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+                        if (error) {
+                            this.logger.error('Error uploading to Cloudinary:', error);
+                            return reject(new InternalServerErrorException('Error al subir archivo a Cloudinary'));
+                        }
+                        resolve(result);
+                    },
                 );
-            }
-            return result;
-            },
-        );
 
-        // Subir el buffer del archivo
-        const bufferStream = stream.Readable.from(file.buffer);
-        return new Promise((resolve, reject) => {
-            bufferStream.pipe(uploadStream);
-            uploadStream.on('finish', (result: UploadApiResponse) => {
-            resolve(result);
+                const stream = require('stream');
+                const bufferStream = new stream.PassThrough();
+                bufferStream.end(file.buffer);
+                bufferStream.pipe(uploadStream);
             });
-            uploadStream.on('error', (error: Error) => {
-            reject(error);
-            });
-        });
         } catch (error) {
-        this.logger.error('Error en uploadFile:', error);
-        throw error;
+            this.logger.error('Error en uploadFile:', error);
+            throw error;
         }
     }
 

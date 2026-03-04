@@ -13,6 +13,8 @@ import { FinalizarSolicitudDto } from './dto/finalizar-solicitud.dto';
 import { CalificarSolicitudDto } from './dto/calificar-solicitud.dto';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
 import { QuerySolicitudDto } from './dto/query-solicitud.dto';
+import { AceptarSolicitudDto } from './dto/aceptar-solicitud.dto';
+import { GeocodingService } from '../geocoding/geocoding.service';
 import {
   EstadoSolicitud,
   RolUsuario,
@@ -33,17 +35,28 @@ export class SolicitudesService {
   constructor(
     private prisma: PrismaService,
     private filesService: FilesService,
+    private geocodingService: GeocodingService,
   ) {}
 
   async create(dto: CreateSolicitudDto, userId: string) {
-    // Validar coordenadas
+    let { latitud, longitud } = dto;
+
+    // Si no vienen coordenadas, intentamos geocodificar la dirección
+    if (latitud === undefined || longitud === undefined) {
+      this.logger.log(`Coordenadas ausentes para la dirección: ${dto.direccion}. Intentando geocodificación...`);
+      const coords = await this.geocodingService.addressToCoords(dto.direccion);
+      latitud = coords.latitud;
+      longitud = coords.longitud;
+    }
+
+    // Validar coordenadas (las recibidas o las calculadas)
     if (
-      typeof dto.latitud !== 'number' ||
-      dto.latitud < -90 ||
-      dto.latitud > 90 ||
-      typeof dto.longitud !== 'number' ||
-      dto.longitud < -180 ||
-      dto.longitud > 180
+      typeof latitud !== 'number' ||
+      latitud < -90 ||
+      latitud > 90 ||
+      typeof longitud !== 'number' ||
+      longitud < -180 ||
+      longitud > 180
     ) {
       throw new BadRequestException(
         'Coordenadas de ubicación inválidas. Latitud debe estar entre -90 y 90, longitud entre -180 y 180.',
@@ -77,8 +90,8 @@ export class SolicitudesService {
       data: {
         tipo: dto.tipo,
         prioridad: dto.prioridad,
-        latitud: dto.latitud,
-        longitud: dto.longitud,
+        latitud: latitud,
+        longitud: longitud,
         direccion: dto.direccion,
         observaciones: dto.observaciones,
         fotos: dto.fotos || [],
@@ -134,7 +147,11 @@ export class SolicitudesService {
       userRole === RolUsuario.PROVEEDOR_ADMIN ||
       userRole === RolUsuario.PROVEEDOR_OPERADOR
     ) {
-      if (usuario.proveedorId) where.proveedorId = usuario.proveedorId;
+      // Modelo Marketplace: Ven lo asignado a ellos O lo que está PENDIENTE
+      where.OR = [
+        { proveedorId: usuario.proveedorId },
+        { estado: EstadoSolicitud.PENDIENTE },
+      ];
     }
 
     if (empresaId) where.empresaId = empresaId;
@@ -151,6 +168,8 @@ export class SolicitudesService {
           empresa: { select: { id: true, razonSocial: true } },
           proveedor: { select: { id: true, razonSocial: true } },
           solicitadoPor: { select: { id: true, nombre: true, apellido: true } },
+          atendidoPor: { select: { id: true, nombre: true, apellido: true } },
+          vehiculoProveedor: { select: { id: true, patente: true, marca: true, modelo: true } },
         },
       }),
       this.prisma.solicitudAuxilio.count({ where }),
@@ -328,6 +347,142 @@ export class SolicitudesService {
       where: { id: operadorAsignado.id },
       data: { estadoDisponibilidad: EstadoDisponibilidad.OCUPADO },
     });
+
+    return updated;
+  }
+
+  /**
+   * Permite que un proveedor tome una solicitud del marketplace (PENDIENTE)
+   */
+  async aceptarMarketplace(id: string, dto: AceptarSolicitudDto, userId: string) {
+    const usuarioSolicitante = await this.prisma.usuario.findUnique({
+      where: { id: userId },
+      include: { proveedor: true },
+    });
+
+    if (!usuarioSolicitante || !usuarioSolicitante.proveedorId) {
+      throw new ForbiddenException(
+        'Solo los usuarios pertenecientes a un proveedor pueden aceptar solicitudes.',
+      );
+    }
+
+    const solicitud = await this.prisma.solicitudAuxilio.findUnique({
+      where: { id },
+      include: { vehiculo: true },
+    });
+
+    if (!solicitud) {
+      throw new NotFoundException('Solicitud no encontrada');
+    }
+
+    if (solicitud.estado !== EstadoSolicitud.PENDIENTE) {
+      throw new BadRequestException(
+        'Esta solicitud ya no está disponible para ser aceptada.',
+      );
+    }
+
+    // 1. Determinar operador responsable
+    const atendidoPorId = dto.operadorId || userId;
+    
+    // Obtenemos los datos mínimos del operador que realizará el servicio
+    const operadorData = dto.operadorId 
+      ? await this.prisma.usuario.findUnique({ where: { id: dto.operadorId } })
+      : usuarioSolicitante;
+
+    if (!operadorData || operadorData.proveedorId !== usuarioSolicitante.proveedorId) {
+      throw new BadRequestException('El operador responsable no existe o no pertenece a tu empresa.');
+    }
+
+    // 2. Validar vehículo o usar el habitual del operador
+    const vehiculoProveedorId = dto.vehiculoProveedorId || operadorData.vehiculoProveedorId;
+
+    if (vehiculoProveedorId) {
+      const vehiculoProv = await this.prisma.vehiculoProveedor.findUnique({
+        where: { id: vehiculoProveedorId },
+      });
+
+      if (!vehiculoProv || vehiculoProv.proveedorId !== usuarioSolicitante.proveedorId) {
+        throw new BadRequestException('El vehículo asignado no pertenece a tu empresa.');
+      }
+
+      if (!vehiculoProv.isActive || vehiculoProv.estado !== EstadoVehiculo.ACTIVO) {
+        throw new BadRequestException('El vehículo no está disponible (inactivo o en mantenimiento).');
+      }
+
+      // Validaciones de compatibilidad estrictas
+      switch (solicitud.tipo) {
+        case TipoAuxilio.GRUA:
+          if (solicitud.vehiculo.tipo === TipoVehiculo.CAMION) {
+            if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)) {
+              throw new BadRequestException('Para remolcar camiones se requiere una Grúa Pesada.');
+            }
+          } else {
+            if (
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.REMOLQUE) && 
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)
+            ) {
+              throw new BadRequestException('El vehículo seleccionado no tiene capacidad de remolque/grúa.');
+            }
+          }
+          break;
+
+        case TipoAuxilio.MECANICO:
+        case TipoAuxilio.BATERIA:
+          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA)) {
+            throw new BadRequestException(`Para servicios de ${solicitud.tipo.toLowerCase()} se requiere un vehículo de Mecánica.`);
+          }
+          break;
+
+        case TipoAuxilio.CAMBIO_RUEDA:
+          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.GOMERIA_NEUMATICOS)) {
+            throw new BadRequestException('Para cambio de rueda se requiere un vehículo de Gomeria/Neumáticos.');
+          }
+          break;
+
+        case TipoAuxilio.CERRAJERIA:
+          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.CERRAJERIA)) {
+            throw new BadRequestException('El vehículo seleccionado no posee equipamiento de cerrajería.');
+          }
+          break;
+        
+        case TipoAuxilio.COMBUSTIBLE:
+           if (
+             !vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA) && 
+             !vehiculoProv.tipos.includes(TipoVehiculoProveedor.OTRO)
+           ) {
+             throw new BadRequestException('El vehículo seleccionado no es apto para traslado de combustible.');
+           }
+           break;
+
+        default:
+          // Para OTROS, no aplicamos restricción técnica estricta por ahora
+          break;
+      }
+    }
+
+    // Actualizar solicitud: asignar proveedor, responsable e inicio
+    const updated = await this.prisma.solicitudAuxilio.update({
+      where: { id },
+      data: {
+        proveedorId: usuarioSolicitante.proveedorId,
+        atendidoPorId: atendidoPorId,
+        vehiculoProveedorId: vehiculoProveedorId,
+        estado: EstadoSolicitud.ASIGNADO,
+        fechaAsignacion: new Date(),
+      },
+      include: {
+        proveedor: true,
+        empresa: true,
+        vehiculo: true,
+        atendidoPor: {
+          select: { id: true, nombre: true, apellido: true },
+        },
+      },
+    });
+
+    this.logger.log(
+      `Solicitud ${id} aceptada por proveedor ${usuarioSolicitante.proveedor?.razonSocial || 'Desconocido'} y asignada a ${atendidoPorId}`,
+    );
 
     return updated;
   }
