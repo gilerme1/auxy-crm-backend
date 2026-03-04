@@ -16,13 +16,17 @@ async function bootstrap() {
         }));
 
     // CORS
+    const origins = process.env.CORS_ORIGIN 
+      ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) 
+      : [];
+
     app.enableCors({
       origin: [
+        ...origins,
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'https://tu-app-auxy.vercel.app' // Pon la de Vercel cuando la tengas
-      ],
-      credentials: true, // ¡Obligatorio porque usas cookies/auth tokens!
+      ].filter(Boolean),
+      credentials: true,
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
       allowedHeaders: 'Content-Type, Accept, Authorization',
     });
