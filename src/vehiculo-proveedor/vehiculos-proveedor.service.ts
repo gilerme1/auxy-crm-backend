@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -81,6 +80,14 @@ export class VehiculosProveedorService {
       where,
       include: {
         proveedor: { select: { id: true, razonSocial: true } },
+        // ✅ Ahora el vehículo sabe quién lo conduce
+        operadores: { 
+          select: { 
+            id: true, 
+            nombre: true, 
+            apellido: true 
+          } 
+        },
         _count: { select: { solicitudes: true } },
       },
       orderBy: { patente: 'asc' },
@@ -248,15 +255,31 @@ export class VehiculosProveedorService {
       throw new NotFoundException('Operador no encontrado');
     }
 
-    if (operador.rol !== RolUsuario.PROVEEDOR_OPERADOR) {
+    if (
+      operador.rol !== RolUsuario.PROVEEDOR_OPERADOR &&
+      operador.rol !== RolUsuario.PROVEEDOR_ADMIN
+    ) {
       throw new BadRequestException(
-        'Solo se pueden asignar operadores con rol PROVEEDOR_OPERADOR',
+        'Solo se pueden asignar vehículos a usuarios con rol PROVEEDOR_OPERADOR o PROVEEDOR_ADMIN',
       );
     }
 
     if (operador.proveedorId && operador.proveedorId !== vehiculo.proveedorId) {
       throw new BadRequestException(
         'El operador debe pertenecer al mismo proveedor',
+      );
+    }
+
+    const vehiculoYaAsignado = await this.prisma.usuario.findFirst({
+      where: {
+        vehiculoProveedorId: vehiculoId,
+        id: { not: operadorId }, // excluir si ya es el mismo (reasignación)
+        isActive: true,
+      },
+    });
+    if (vehiculoYaAsignado) {
+      throw new BadRequestException(
+        `Este vehículo ya está asignado a ${vehiculoYaAsignado.nombre} ${vehiculoYaAsignado.apellido}. Desasignalo primero.`,
       );
     }
 

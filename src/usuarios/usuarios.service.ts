@@ -69,14 +69,29 @@ export class UsuariosService {
     }
 
     if (dto.vehiculoProveedorId) {
-      if (dto.rol !== RolUsuario.PROVEEDOR_OPERADOR) {
+      if (
+        dto.rol !== RolUsuario.PROVEEDOR_OPERADOR &&
+        dto.rol !== RolUsuario.PROVEEDOR_ADMIN
+      ) {
         throw new BadRequestException(
-          'Solo los operadores de proveedor pueden tener vehículo asignado',
+          'Solo los usuarios con rol PROVEEDOR_OPERADOR o PROVEEDOR_ADMIN pueden tener vehículo asignado',
         );
       }
+
+      const vehiculoYaAsignado = await this.prisma.usuario.findFirst({
+        where: { vehiculoProveedorId: dto.vehiculoProveedorId, isActive: true },
+      });
+      
+      if (vehiculoYaAsignado) {
+        throw new BadRequestException(
+          `Este vehículo ya está asignado a ${vehiculoYaAsignado.nombre} ${vehiculoYaAsignado.apellido}`,
+        );
+      }
+
       const vehiculo = await this.prisma.vehiculoProveedor.findUnique({
         where: { id: dto.vehiculoProveedorId, isActive: true },
       });
+
       if (!vehiculo) {
         throw new NotFoundException(
           `El vehículo de proveedor con ID ${dto.vehiculoProveedorId} no existe o está inactivo`,

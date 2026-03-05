@@ -502,7 +502,9 @@ export class SolicitudesService {
 
     if (dto.estado === EstadoSolicitud.EN_CAMINO && !solicitud.fechaInicio) {
       updateData.fechaInicio = new Date();
-      updateData.atendidoPor = { connect: { id: userId } };
+      if (!solicitud.atendidoPorId) {
+        updateData.atendidoPor = { connect: { id: userId } };
+      }
     }
     if (dto.estado === EstadoSolicitud.FINALIZADO) {
       updateData.fechaFinalizacion = new Date();

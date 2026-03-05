@@ -99,7 +99,6 @@ export class SolicitudesController {
     return this.solicitudesService.getRecursosDisponibles(id, userId);
   }
 
-
   @Post(':id/aceptar')
   @Roles(RolUsuario.PROVEEDOR_ADMIN, RolUsuario.PROVEEDOR_OPERADOR)
   @HttpCode(HttpStatus.OK)
@@ -113,19 +112,20 @@ export class SolicitudesController {
   }
 
   @Patch(':id/estado')
-  @Roles(RolUsuario.PROVEEDOR_OPERADOR, RolUsuario.SUPER_ADMIN)
+  @Roles(RolUsuario.PROVEEDOR_ADMIN, RolUsuario.PROVEEDOR_OPERADOR, RolUsuario.SUPER_ADMIN)
   @ApiOperation({ summary: 'Cambiar estado de solicitud' })
   cambiarEstado(
     @Param('id') id: string,
     @Body() dto: CambiarEstadoDto,
     @CurrentUser('sub') userId: string,
-    @CurrentUser('rol') userRole: RolUsuario, // ← Cambia a RolUsuario
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
     return this.solicitudesService.cambiarEstado(id, dto, userId, userRole);
   }
 
+  // ✅ POST :id/finalizar
   @Post(':id/finalizar')
-  @Roles(RolUsuario.PROVEEDOR_OPERADOR)
+  @Roles(RolUsuario.PROVEEDOR_ADMIN, RolUsuario.PROVEEDOR_OPERADOR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Finalizar servicio' })
   finalizar(
