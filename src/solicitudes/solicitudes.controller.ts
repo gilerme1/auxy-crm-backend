@@ -59,7 +59,7 @@ export class SolicitudesController {
   findAll(
     @Query() query: QuerySolicitudDto,
     @CurrentUser('sub') userId: string,
-    @CurrentUser('rol') userRole: RolUsuario, // ← Cambia a RolUsuario
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
     return this.solicitudesService.findAll(query, userId, userRole);
   }
@@ -69,7 +69,7 @@ export class SolicitudesController {
   findOne(
     @Param('id') id: string,
     @CurrentUser('sub') userId: string,
-    @CurrentUser('rol') userRole: RolUsuario, // ← Cambia a RolUsuario
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
     return this.solicitudesService.findOne(id, userId, userRole);
   }
@@ -123,7 +123,6 @@ export class SolicitudesController {
     return this.solicitudesService.cambiarEstado(id, dto, userId, userRole);
   }
 
-  // ✅ POST :id/finalizar
   @Post(':id/finalizar')
   @Roles(RolUsuario.PROVEEDOR_ADMIN, RolUsuario.PROVEEDOR_OPERADOR)
   @HttpCode(HttpStatus.OK)
@@ -132,10 +131,14 @@ export class SolicitudesController {
     @Param('id') id: string,
     @Body() dto: FinalizarSolicitudDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
-    return this.solicitudesService.finalizar(id, dto, userId);
+    return this.solicitudesService.finalizar(id, dto, userId, userRole);
   }
 
+  // ✅ calificar: se pasa userRole para distinguir
+  //    CLIENTE_ADMIN  → puede calificar cualquier solicitud de su empresa
+  //    CLIENTE_OPERADOR → solo la solicitud que él mismo creó
   @Post(':id/calificar')
   @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR)
   @HttpCode(HttpStatus.OK)
@@ -144,8 +147,9 @@ export class SolicitudesController {
     @Param('id') id: string,
     @Body() dto: CalificarSolicitudDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('rol') userRole: RolUsuario,
   ) {
-    return this.solicitudesService.calificar(id, dto, userId);
+    return this.solicitudesService.calificar(id, dto, userId, userRole);
   }
 
   @Post(':id/cancelar')
@@ -161,12 +165,20 @@ export class SolicitudesController {
     return this.solicitudesService.cancelar(id, dto.motivo, userId, userRole);
   }
 
+  // ─── FOTOS ────────────────────────────────────────────────────────────────
+
   @Post(':id/fotos')
-  @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR, RolUsuario.PROVEEDOR_OPERADOR)
+  // ✅ PROVEEDOR_ADMIN incluido — puede subir evidencias cuando opera en campo
+  @Roles(
+    RolUsuario.CLIENTE_ADMIN,
+    RolUsuario.CLIENTE_OPERADOR,
+    RolUsuario.PROVEEDOR_ADMIN,
+    RolUsuario.PROVEEDOR_OPERADOR,
+  )
   @UseInterceptors(
     FilesInterceptor('files', 10, {
       storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB por archivo
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
   @ApiConsumes('multipart/form-data')
@@ -181,7 +193,13 @@ export class SolicitudesController {
   }
 
   @Delete(':id/fotos')
-  @Roles(RolUsuario.CLIENTE_ADMIN, RolUsuario.CLIENTE_OPERADOR, RolUsuario.PROVEEDOR_OPERADOR)
+  // ✅ PROVEEDOR_ADMIN incluido — puede eliminar fotos cuando opera en campo
+  @Roles(
+    RolUsuario.CLIENTE_ADMIN,
+    RolUsuario.CLIENTE_OPERADOR,
+    RolUsuario.PROVEEDOR_ADMIN,
+    RolUsuario.PROVEEDOR_OPERADOR,
+  )
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Eliminar una foto de una solicitud' })
   deleteFoto(

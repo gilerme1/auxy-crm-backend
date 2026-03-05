@@ -41,7 +41,6 @@ export class SolicitudesService {
   async create(dto: CreateSolicitudDto, userId: string) {
     let { latitud, longitud } = dto;
 
-    // Si no vienen coordenadas, intentamos geocodificar la dirección
     if (latitud === undefined || longitud === undefined) {
       this.logger.log(`Coordenadas ausentes para la dirección: ${dto.direccion}. Intentando geocodificación...`);
       const coords = await this.geocodingService.addressToCoords(dto.direccion);
@@ -49,7 +48,6 @@ export class SolicitudesService {
       longitud = coords.longitud;
     }
 
-    // Validar coordenadas (las recibidas o las calculadas)
     if (
       typeof latitud !== 'number' ||
       latitud < -90 ||
@@ -62,67 +60,50 @@ export class SolicitudesService {
         'Coordenadas de ubicación inválidas. Latitud debe estar entre -90 y 90, longitud entre -180 y 180.',
       );
     }
-    const vehiculo = await this.prisma.vehiculo.findUnique({
-      where: { id: dto.vehiculoId },
-      include: { empresa: true },
-    });
-
-    if (!vehiculo) {
-      throw new NotFoundException('Vehículo no encontrado');
-    }
 
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: userId },
     });
 
-    if (!usuario) {
-      throw new NotFoundException('Usuario no encontrado');
+    if (!usuario || !usuario.empresaId) {
+      throw new ForbiddenException('Solo usuarios de empresa cliente pueden crear solicitudes');
     }
 
-    if (
-      usuario.rol !== RolUsuario.SUPER_ADMIN &&
-      usuario.empresaId !== vehiculo.empresaId
-    ) {
-      throw new ForbiddenException('No tienes acceso a este vehículo');
+    const vehiculo = await this.prisma.vehiculo.findUnique({
+      where: { id: dto.vehiculoId },
+    });
+
+    if (!vehiculo) throw new NotFoundException('Vehículo no encontrado');
+    if (vehiculo.empresaId !== usuario.empresaId) {
+      throw new ForbiddenException('El vehículo no pertenece a tu empresa');
     }
+
+    const numero = `SOL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
 
     return this.prisma.solicitudAuxilio.create({
       data: {
+        numero,
         tipo: dto.tipo,
-        prioridad: dto.prioridad,
-        latitud: latitud,
-        longitud: longitud,
+        prioridad: dto.prioridad ?? 'MEDIA',
+        latitud: latitud.toString(),
+        longitud: longitud.toString(),
         direccion: dto.direccion,
         observaciones: dto.observaciones,
-        fotos: dto.fotos || [],
         vehiculoId: dto.vehiculoId,
-        empresaId: vehiculo.empresaId,
+        empresaId: usuario.empresaId,
         solicitadoPorId: userId,
+        estado: EstadoSolicitud.PENDIENTE,
       },
       include: {
         vehiculo: true,
         empresa: true,
-        solicitadoPor: {
-          select: { id: true, nombre: true, apellido: true, email: true },
-        },
+        solicitadoPor: { select: { id: true, nombre: true, apellido: true } },
       },
     });
   }
 
-  async findAll(
-    query: QuerySolicitudDto,
-    userId: string,
-    userRole: RolUsuario, // Cambiamos a tipo RolUsuario directamente
-  ) {
-    const {
-      page = 1,
-      limit = 10,
-      estado,
-      tipo,
-      empresaId,
-      proveedorId,
-      vehiculoId,
-    } = query;
+  async findAll(query: QuerySolicitudDto, userId: string, userRole: RolUsuario) {
+    const { page = 1, limit = 50, estado, tipo, vehiculoId, empresaId, proveedorId } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.SolicitudAuxilioWhereInput = {};
@@ -137,7 +118,6 @@ export class SolicitudesService {
 
     if (!usuario) throw new ForbiddenException('Usuario no válido');
 
-    // Filtros según rol - usamos comparación directa con enum
     if (
       userRole === RolUsuario.CLIENTE_ADMIN ||
       userRole === RolUsuario.CLIENTE_OPERADOR
@@ -226,17 +206,14 @@ export class SolicitudesService {
   async asignar(id: string, dto: AsignarSolicitudDto, userId: string) {
     const solicitud = await this.findOne(id, userId, RolUsuario.SUPER_ADMIN);
     if (solicitud.estado !== EstadoSolicitud.PENDIENTE) {
-      throw new BadRequestException(
-        'Solo solicitudes pendientes pueden asignarse',
-      );
+      throw new BadRequestException('Solo solicitudes pendientes pueden asignarse');
     }
 
     const vehiculoCliente = await this.prisma.vehiculo.findUnique({
       where: { id: solicitud.vehiculoId },
     });
 
-    if (!vehiculoCliente)
-      throw new NotFoundException('Vehículo cliente no encontrado');
+    if (!vehiculoCliente) throw new NotFoundException('Vehículo cliente no encontrado');
 
     // 1. Validar proveedor
     const proveedor = await this.prisma.proveedor.findUnique({
@@ -247,79 +224,35 @@ export class SolicitudesService {
       throw new NotFoundException('Proveedor no encontrado o inactivo');
     }
 
-    // 2. Validar vehículo proveedor SI se envía (tipado seguro)
-    let vehiculoProveedorSeleccionado: {
-      id: string;
-      proveedorId: string;
-      isActive: boolean;
-      tipos: TipoVehiculoProveedor[];
-    } | null = null;
-
-    if (dto.vehiculoProveedorId) {
-      vehiculoProveedorSeleccionado =
-        await this.prisma.vehiculoProveedor.findUnique({
-          where: { id: dto.vehiculoProveedorId },
-          select: {
-            id: true,
-            proveedorId: true,
-            isActive: true,
-            tipos: true,
-          },
-        });
-
-      if (!vehiculoProveedorSeleccionado) {
-        throw new NotFoundException('Vehículo de proveedor no encontrado');
-      }
-
-      if (vehiculoProveedorSeleccionado.proveedorId !== dto.proveedorId) {
-        throw new BadRequestException('El vehículo pertenece a otro proveedor');
-      }
-
-      if (!vehiculoProveedorSeleccionado.isActive) {
-        throw new BadRequestException('El vehículo de proveedor está inactivo');
-      }
-
-      // Validación de compatibilidad
-      if (
-        vehiculoCliente.tipo === TipoVehiculo.CAMION &&
-        !vehiculoProveedorSeleccionado.tipos.includes(
-          TipoVehiculoProveedor.GRUA_PESADA_CAMIONES,
-        )
-      ) {
-        throw new BadRequestException(
-          'Camiones requieren GRUA_PESADA_CAMIONES',
-        );
-      }
-    }
-
-    // 3. Buscar operadores disponibles del proveedor
-    const candidatos = await this.prisma.usuario.findMany({
+    // 2. Buscar operador disponible
+    const operadorDisponible = await this.prisma.usuario.findFirst({
       where: {
+        proveedorId: dto.proveedorId,
         rol: RolUsuario.PROVEEDOR_OPERADOR,
         estadoDisponibilidad: EstadoDisponibilidad.DISPONIBLE,
-        proveedorId: dto.proveedorId,
-      },
-      select: {
-        id: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-        vehiculoProveedorId: true,
-        proveedor: true,
+        isActive: true,
       },
     });
 
-    if (candidatos.length === 0) {
-      throw new NotFoundException(
-        'No hay operadores disponibles en este proveedor',
-      );
+    // 3. Si viene vehiculoProveedorId específico, validarlo
+    let vehiculoProveedorIdFinal = dto.vehiculoProveedorId;
+
+    if (vehiculoProveedorIdFinal) {
+      const vehiculoProv = await this.prisma.vehiculoProveedor.findUnique({
+        where: { id: vehiculoProveedorIdFinal },
+      });
+      if (!vehiculoProv || vehiculoProv.proveedorId !== dto.proveedorId) {
+        throw new BadRequestException('El vehículo asignado no pertenece al proveedor seleccionado.');
+      }
     }
 
-    // 4. Elegir operador (primero por simplicidad)
-    const operadorAsignado = candidatos[0];
+    // 4. Determinar operador a asignar
+    const operadorAsignado = operadorDisponible;
+    if (!operadorAsignado) {
+      throw new BadRequestException('No hay operadores disponibles en el proveedor seleccionado.');
+    }
 
     // 5. Auto-asignar vehículo del operador si no se especifica manualmente
-    let vehiculoProveedorIdFinal = dto.vehiculoProveedorId;
     if (!vehiculoProveedorIdFinal && operadorAsignado.vehiculoProveedorId) {
       vehiculoProveedorIdFinal = operadorAsignado.vehiculoProveedorId;
     }
@@ -342,7 +275,7 @@ export class SolicitudesService {
       },
     });
 
-    // 6. Marcar operador como ocupado
+    // 7. Marcar operador como ocupado
     await this.prisma.usuario.update({
       where: { id: operadorAsignado.id },
       data: { estadoDisponibilidad: EstadoDisponibilidad.OCUPADO },
@@ -383,9 +316,8 @@ export class SolicitudesService {
 
     // 1. Determinar operador responsable
     const atendidoPorId = dto.operadorId || userId;
-    
-    // Obtenemos los datos mínimos del operador que realizará el servicio
-    const operadorData = dto.operadorId 
+
+    const operadorData = dto.operadorId
       ? await this.prisma.usuario.findUnique({ where: { id: dto.operadorId } })
       : usuarioSolicitante;
 
@@ -405,58 +337,53 @@ export class SolicitudesService {
         throw new BadRequestException('El vehículo asignado no pertenece a tu empresa.');
       }
 
-      if (!vehiculoProv.isActive || vehiculoProv.estado !== EstadoVehiculo.ACTIVO) {
-        throw new BadRequestException('El vehículo no está disponible (inactivo o en mantenimiento).');
-      }
-
-      // Validaciones de compatibilidad estrictas
-      switch (solicitud.tipo) {
-        case TipoAuxilio.GRUA:
-          if (solicitud.vehiculo.tipo === TipoVehiculo.CAMION) {
-            if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)) {
-              throw new BadRequestException('Para remolcar camiones se requiere una Grúa Pesada.');
+      // 3. Validar compatibilidad vehículo-auxilio
+      if (solicitud.vehiculo) {
+        switch (solicitud.tipo) {
+          case TipoAuxilio.GRUA:
+            if (solicitud.vehiculo.tipo === TipoVehiculo.CAMION) {
+              if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)) {
+                throw new BadRequestException('Para camiones se requiere una grúa pesada.');
+              }
+            } else {
+              if (
+                !vehiculoProv.tipos.includes(TipoVehiculoProveedor.REMOLQUE) &&
+                !vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)
+              ) {
+                throw new BadRequestException('El vehículo seleccionado no es apto para remolque.');
+              }
             }
-          } else {
+            break;
+
+          case TipoAuxilio.CAMBIO_RUEDA:
+          case TipoAuxilio.BATERIA:
             if (
-              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.REMOLQUE) && 
-              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES)
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA) &&
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.GOMERIA_NEUMATICOS) &&
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.OTRO)
             ) {
-              throw new BadRequestException('El vehículo seleccionado no tiene capacidad de remolque/grúa.');
+              throw new BadRequestException('El vehículo seleccionado no es apto para este tipo de auxilio.');
             }
-          }
-          break;
+            break;
 
-        case TipoAuxilio.MECANICO:
-        case TipoAuxilio.BATERIA:
-          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA)) {
-            throw new BadRequestException(`Para servicios de ${solicitud.tipo.toLowerCase()} se requiere un vehículo de Mecánica.`);
-          }
-          break;
+          case TipoAuxilio.CERRAJERIA:
+            if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.CERRAJERIA)) {
+              throw new BadRequestException('El vehículo seleccionado no es apto para cerrajería.');
+            }
+            break;
 
-        case TipoAuxilio.CAMBIO_RUEDA:
-          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.GOMERIA_NEUMATICOS)) {
-            throw new BadRequestException('Para cambio de rueda se requiere un vehículo de Gomeria/Neumáticos.');
-          }
-          break;
+          case TipoAuxilio.COMBUSTIBLE:
+            if (
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA) &&
+              !vehiculoProv.tipos.includes(TipoVehiculoProveedor.OTRO)
+            ) {
+              throw new BadRequestException('El vehículo seleccionado no es apto para traslado de combustible.');
+            }
+            break;
 
-        case TipoAuxilio.CERRAJERIA:
-          if (!vehiculoProv.tipos.includes(TipoVehiculoProveedor.CERRAJERIA)) {
-            throw new BadRequestException('El vehículo seleccionado no posee equipamiento de cerrajería.');
-          }
-          break;
-        
-        case TipoAuxilio.COMBUSTIBLE:
-           if (
-             !vehiculoProv.tipos.includes(TipoVehiculoProveedor.MECANICA) && 
-             !vehiculoProv.tipos.includes(TipoVehiculoProveedor.OTRO)
-           ) {
-             throw new BadRequestException('El vehículo seleccionado no es apto para traslado de combustible.');
-           }
-           break;
-
-        default:
-          // Para OTROS, no aplicamos restricción técnica estricta por ahora
-          break;
+          default:
+            break;
+        }
       }
     }
 
@@ -521,18 +448,11 @@ export class SolicitudesService {
   }
 
   async getRecursosDisponibles(solicitudId: string, userId: string) {
-    const solicitud = await this.findOne(
-      solicitudId,
-      userId,
-      RolUsuario.SUPER_ADMIN,
-    );
+    const solicitud = await this.findOne(solicitudId, userId, RolUsuario.SUPER_ADMIN);
 
-    // Buscar vehículos activos del proveedor asociado (o de todos si no hay proveedor aún)
     const recursos = await this.prisma.vehiculoProveedor.findMany({
       where: {
-        proveedor: {
-          isActive: true,
-        },
+        proveedor: { isActive: true },
         isActive: true,
         estado: EstadoVehiculo.ACTIVO,
       },
@@ -542,7 +462,6 @@ export class SolicitudesService {
       orderBy: { marca: 'asc' },
     });
 
-    // Filtrar por compatibilidad básica (opcional, puedes mejorar con distancia más adelante)
     const compatibles = recursos.filter((r) => {
       if (
         solicitud.tipo === TipoAuxilio.GRUA &&
@@ -550,23 +469,17 @@ export class SolicitudesService {
       ) {
         return r.tipos.includes(TipoVehiculoProveedor.GRUA_PESADA_CAMIONES);
       }
-      return true; // por defecto, todos los demás
+      return true;
     });
 
     return compatibles;
   }
 
-  async finalizar(id: string, dto: FinalizarSolicitudDto, userId: string) {
-    const solicitud = await this.findOne(
-      id,
-      userId,
-      RolUsuario.PROVEEDOR_OPERADOR,
-    );
+  async finalizar(id: string, dto: FinalizarSolicitudDto, userId: string, userRole: RolUsuario) {
+    const solicitud = await this.findOne(id, userId, userRole);
 
     if (solicitud.estado !== EstadoSolicitud.EN_SERVICIO) {
-      throw new BadRequestException(
-        'Solo se pueden finalizar solicitudes en servicio',
-      );
+      throw new BadRequestException('Solo se pueden finalizar solicitudes en servicio');
     }
 
     return this.prisma.solicitudAuxilio.update({
@@ -580,17 +493,28 @@ export class SolicitudesService {
     });
   }
 
-  async calificar(id: string, dto: CalificarSolicitudDto, userId: string) {
-    const solicitud = await this.findOne(id, userId, RolUsuario.CLIENTE_ADMIN);
+  // ✅ FIX: calificar ahora recibe userRole para distinguir permisos
+  //   - CLIENTE_ADMIN: puede calificar cualquier solicitud de su empresa
+  //   - CLIENTE_OPERADOR: solo puede calificar la que él mismo creó (solicitadoPorId === userId)
+  async calificar(id: string, dto: CalificarSolicitudDto, userId: string, userRole: RolUsuario) {
+    const solicitud = await this.findOne(id, userId, userRole);
 
     if (solicitud.estado !== EstadoSolicitud.FINALIZADO) {
-      throw new BadRequestException(
-        'Solo se pueden calificar servicios finalizados',
-      );
+      throw new BadRequestException('Solo se pueden calificar servicios finalizados');
     }
 
     if (solicitud.calificacion) {
       throw new BadRequestException('Este servicio ya fue calificado');
+    }
+
+    // CLIENTE_OPERADOR solo puede calificar si fue quien creó la solicitud
+    if (
+      userRole === RolUsuario.CLIENTE_OPERADOR &&
+      solicitud.solicitadoPorId !== userId
+    ) {
+      throw new ForbiddenException(
+        'Solo el operador que generó la solicitud puede calificar este servicio',
+      );
     }
 
     const updated = await this.prisma.solicitudAuxilio.update({
@@ -645,6 +569,7 @@ export class SolicitudesService {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: userId },
     });
+
     if (!usuario) throw new ForbiddenException('Usuario no válido');
 
     if (
@@ -658,7 +583,11 @@ export class SolicitudesService {
       userRole === RolUsuario.PROVEEDOR_ADMIN ||
       userRole === RolUsuario.PROVEEDOR_OPERADOR
     ) {
-      if (solicitud.proveedorId !== usuario.proveedorId) {
+      // Puede acceder si está asignada a su proveedor O si está PENDIENTE (marketplace)
+      if (
+        solicitud.proveedorId !== usuario.proveedorId &&
+        solicitud.estado !== EstadoSolicitud.PENDIENTE
+      ) {
         throw new ForbiddenException('No tienes acceso a esta solicitud');
       }
     }
@@ -729,7 +658,6 @@ export class SolicitudesService {
       });
 
       const fotoUrls = results.map((r) => r.secure_url);
-
       const fotosActuales = solicitud.fotos || [];
       const fotosActualizadas = [...fotosActuales, ...fotoUrls];
 
@@ -744,10 +672,7 @@ export class SolicitudesService {
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Error subiendo fotos a solicitud ${solicitudId}:`,
-        error,
-      );
+      this.logger.error(`Error subiendo fotos a solicitud ${solicitudId}:`, error);
       throw error;
     }
   }
@@ -780,10 +705,7 @@ export class SolicitudesService {
         data: { fotos: fotosActualizadas },
       });
     } catch (error) {
-      this.logger.error(
-        `Error eliminando foto de solicitud ${solicitudId}:`,
-        error,
-      );
+      this.logger.error(`Error eliminando foto de solicitud ${solicitudId}:`, error);
       throw error;
     }
   }
