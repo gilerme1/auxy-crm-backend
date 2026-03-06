@@ -26,15 +26,8 @@ export class GeocodingService {
         this.logger.log(`Geocodificando dirección: ${direccion}`);
         
         const url = new URL(this.PHOTON_URL);
-        url.searchParams.append('q', direccion);
-        url.searchParams.append('limit', '1');
-        url.searchParams.append('lang', 'es');
-        
-        // Priorizar resultados en un área aproximada de Argentina
-        // para evitar confusiones con otros países.
-        // bbox format: minLon, minLat, maxLon, maxLat
-        // Argentina aprox: -73, -55, -53, -22
-        url.searchParams.append('bbox', '-73.5,-55.0,-53.5,-21.8');
+        url.searchParams.append('q', direccion + ', Argentina');
+        url.searchParams.append('lang', 'en');
 
         const response = await fetch(url.toString());
 
